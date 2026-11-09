@@ -1,1 +1,12 @@
-**/target/\nnode_modules/\n.next/\n.env\n!.env.example\n.idea/\n.vscode/\n
+**/target/
+node_modules/
+.next/
+out/
+dist/
+.env
+.env.*
+!.env.example
+.idea/
+.vscode/
+*.log
+coverage/

@@ -1,0 +1,45 @@
+services:
+  postgres:
+    image: postgis/postgis:18-3.6
+    container_name: suabhi-cab-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-suabhi_cab_booking_db}
+      POSTGRES_USER: ${POSTGRES_USER:-cab_booking_app}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
+    ports:
+      - "${POSTGRES_HOST_PORT:-5432}:5432"
+    volumes:
+      - suabhi-postgres-data:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-cab_booking_app} -d ${POSTGRES_DB:-suabhi_cab_booking_db}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks: [cab-private]
+
+  redis:
+    image: redis:8.2-alpine
+    container_name: suabhi-cab-redis
+    restart: unless-stopped
+    environment:
+      REDIS_PASSWORD: ${REDIS_PASSWORD:?Set REDIS_PASSWORD in .env}
+    command: ["redis-server", "--appendonly", "yes", "--requirepass", "${REDIS_PASSWORD:?Set REDIS_PASSWORD in .env}"]
+    ports:
+      - "${REDIS_HOST_PORT:-6379}:6379"
+    volumes:
+      - suabhi-redis-data:/data
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli -a '${REDIS_PASSWORD:?}' ping | grep -q PONG"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks: [cab-private]
+
+volumes:
+  suabhi-postgres-data:
+  suabhi-redis-data:
+
+networks:
+  cab-private:
+    driver: bridge
