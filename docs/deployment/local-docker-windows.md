@@ -17,6 +17,15 @@ Expand-Archive -Path .\suabhi-cab-booking-template-docker-overlay.zip -Destinati
 
 The ZIP contains the uploaded React Material admin source, Rentaly customer pages/assets and matching Docker files. Apply it before starting Compose.
 
+Commit the extracted template sources and assets to the feature branch:
+
+```powershell
+git status --short
+git add -A
+git commit -m "feat: integrate supplied customer and admin templates"
+git push origin feature/phase-1-foundation
+```
+
 ## Reserved loopback-only host ports
 
 | Service | Host port | Local URL |
