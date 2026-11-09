@@ -1,3 +1,4 @@
+name: suabhi-cab-booking
 services:
   postgres:
     image: postgis/postgis:18-3.6
@@ -8,15 +9,15 @@ services:
       POSTGRES_USER: ${POSTGRES_USER:-cab_booking_app}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
     ports:
-      - "${POSTGRES_HOST_PORT:-5432}:5432"
+      - "127.0.0.1:${POSTGRES_HOST_PORT:-55432}:5432"
     volumes:
-      - suabhi-postgres-data:/var/lib/postgresql
+      - suabhi-cab-postgres-data:/var/lib/postgresql
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-cab_booking_app} -d ${POSTGRES_DB:-suabhi_cab_booking_db}"]
       interval: 10s
       timeout: 5s
-      retries: 10
-    networks: [cab-private]
+      retries: 15
+    networks: [suabhi-cab-private]
 
   redis:
     image: redis:8.2-alpine
@@ -26,20 +27,106 @@ services:
       REDIS_PASSWORD: ${REDIS_PASSWORD:?Set REDIS_PASSWORD in .env}
     command: ["redis-server", "--appendonly", "yes", "--requirepass", "${REDIS_PASSWORD:?Set REDIS_PASSWORD in .env}"]
     ports:
-      - "${REDIS_HOST_PORT:-6379}:6379"
+      - "127.0.0.1:${REDIS_HOST_PORT:-56379}:6379"
     volumes:
-      - suabhi-redis-data:/data
+      - suabhi-cab-redis-data:/data
     healthcheck:
-      test: ["CMD-SHELL", "redis-cli -a '${REDIS_PASSWORD:?}' ping | grep -q PONG"]
+      test: ["CMD-SHELL", "redis-cli -a '$$\{REDIS_PASSWORD\}' ping | grep -q PONG"]
       interval: 10s
       timeout: 5s
       retries: 10
-    networks: [cab-private]
+    networks: [suabhi-cab-private]
+
+  cab-booking-api:
+    build:
+      context: .
+      dockerfile: backend/cab-booking-api/Dockerfile
+    container_name: suabhi-cab-api
+    restart: unless-stopped
+    environment:
+      SPRING_PROFILES_ACTIVE: ${SPRING_PROFILES_ACTIVE:-local}
+      SERVER_PORT: 8080
+      DATABASE_URL: jdbc:postgresql://postgres:5432/${POSTGRES_DB:-suabhi_cab_booking_db}
+      DATABASE_USERNAME: ${POSTGRES_USER:-cab_booking_app}
+      DATABASE_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      REDIS_PASSWORD: ${REDIS_PASSWORD:?Set REDIS_PASSWORD in .env}
+      SESSION_COOKIE_SECURE: ${SESSION_COOKIE_SECURE:-false}
+      CSRF_COOKIE_SECURE: ${CSRF_COOKIE_SECURE:-false}
+      HSTS_ENABLED: ${HSTS_ENABLED:-false}
+      APP_CORS_ALLOWED_ORIGINS: ${APP_CORS_ALLOWED_ORIGINS:-http://localhost:53000,http://localhost:53001,http://localhost:53002}
+    ports:
+      - "127.0.0.1:${API_HOST_PORT:-58080}:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1:8080/actuator/health || exit 1"]
+      interval: 20s
+      timeout: 5s
+      retries: 10
+      start_period: 45s
+    networks: [suabhi-cab-private]
+
+  customer-web:
+    build:
+      context: frontend/apps/customer-web
+      dockerfile: Dockerfile
+    container_name: suabhi-cab-customer-web
+    restart: unless-stopped
+    environment:
+      NEXT_PUBLIC_API_BASE_URL: ${PUBLIC_API_URL:-http://localhost:58080/api/v1}
+      API_INTERNAL_URL: http://cab-booking-api:8080/api/v1
+    ports:
+      - "127.0.0.1:${CUSTOMER_HOST_PORT:-53000}:3000"
+    depends_on:
+      cab-booking-api:
+        condition: service_healthy
+    networks: [suabhi-cab-private]
+
+  admin-web:
+    build:
+      context: frontend/apps/admin-web
+      dockerfile: Dockerfile
+      args:
+        VITE_API_BASE_URL: ${PUBLIC_API_URL:-http://localhost:58080/api/v1}
+        VITE_BACKEND: ${VITE_BACKEND:-false}
+        VITE_DEMO_MODE: ${VITE_DEMO_MODE:-true}
+        VITE_DEMO_EMAIL: ${VITE_DEMO_EMAIL:-admin@suabhi.local}
+        VITE_DEMO_PASSWORD: ${VITE_DEMO_PASSWORD:?Set VITE_DEMO_PASSWORD in .env}
+    container_name: suabhi-cab-admin-web
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:${ADMIN_HOST_PORT:-53001}:80"
+    depends_on:
+      cab-booking-api:
+        condition: service_healthy
+    networks: [suabhi-cab-private]
+
+  driver-web:
+    build:
+      context: frontend/apps/driver-web
+      dockerfile: Dockerfile
+    container_name: suabhi-cab-driver-web
+    restart: unless-stopped
+    environment:
+      NEXT_PUBLIC_API_BASE_URL: ${PUBLIC_API_URL:-http://localhost:58080/api/v1}
+      API_INTERNAL_URL: http://cab-booking-api:8080/api/v1
+    ports:
+      - "127.0.0.1:${DRIVER_HOST_PORT:-53002}:3000"
+    depends_on:
+      cab-booking-api:
+        condition: service_healthy
+    networks: [suabhi-cab-private]
 
 volumes:
-  suabhi-postgres-data:
-  suabhi-redis-data:
+  suabhi-cab-postgres-data:
+  suabhi-cab-redis-data:
 
 networks:
-  cab-private:
+  suabhi-cab-private:
+    name: suabhi-cab-private
     driver: bridge
