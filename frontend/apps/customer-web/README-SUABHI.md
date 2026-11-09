@@ -1,7 +1,19 @@
-# Customer website
+# Suabhi customer website
 
-The uploaded Rentaly dark rental theme is retained as the primary customer-facing design system, including its CSS, JavaScript, fonts, images and static page templates. Next.js serves the site bundle under `/rentaly`; `/` redirects to the dark homepage. The theme's original HTML pages remain available at `/rentaly/*.html` until each journey is migrated into React components and connected to backend APIs.
+The customer site now uses an original Suabhi-owned Next.js interface. It does not ship the copied Rentaly / Designesia demo pages, vendor JavaScript, demo imagery, font files or template CSS.
 
-The supplied template included a Google Maps JavaScript API URL with an embedded key on booking pages. That key reference was removed. Configure a new provider key through a proper secret/environment strategy when Maps integration is implemented.
+## Phase 2 integration
 
-Booking and account forms are currently design templates only; they do not create real bookings or process payment.
+- Registration: POST /api/v1/auth/register
+- Login: POST /api/v1/auth/login
+- Current identity: GET /api/v1/auth/me
+- Logout: POST /api/v1/auth/logout
+- Profile: GET and PATCH /api/v1/customer/profile
+
+Browser writes first request a CSRF token, then send it in X-XSRF-TOKEN with credentials included. The API base URL is compiled into the client bundle through NEXT_PUBLIC_API_BASE_URL at build time. API_INTERNAL_URL is used only for server-side fleet catalogue fetching.
+
+The fleet catalogue shown on the home page comes from the public backend API. Booking, fare calculation, payment and email verification are not yet enabled.
+
+## Original implementation and assets
+
+The current site uses system fonts, CSS-generated decorative elements and text content created for Suabhi. No images, fonts, JavaScript bundles, HTML pages or styles from the supplied HTTrack mirror are included.

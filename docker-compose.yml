@@ -75,6 +75,8 @@ services:
     build:
       context: frontend/apps/customer-web
       dockerfile: Dockerfile
+      args:
+        NEXT_PUBLIC_API_BASE_URL: ${PUBLIC_API_URL:-http://localhost:58080/api/v1}
     container_name: suabhi-cab-customer-web
     restart: unless-stopped
     environment:
