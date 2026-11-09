@@ -1,0 +1,8 @@
+#logo .suabhi-wordmark { display:block; color:#fff; font-size:25px; font-weight:800; letter-spacing:.18em; line-height:1; }
+#logo small { display:block; margin-top:6px; color:#d6b36a; font-size:9px; letter-spacing:.28em; font-weight:700; }
+#logo a { display:inline-block; padding:6px 0; }
+#topbar .topbar-widget { color:rgba(255,255,255,.78); letter-spacing:.035em; }
+#mainmenu .menu-item { letter-spacing:.015em; }
+#mainmenu .menu-item:hover { color:#d6b36a; }
+body.dark-scheme .btn-main, body.dark-scheme .btn-line:hover { border-color:#d6b36a; }
+.suabhi-preview-note { padding:10px 16px; text-align:center; color:#d6b36a; background:#111820; font-size:12px; letter-spacing:.04em; }

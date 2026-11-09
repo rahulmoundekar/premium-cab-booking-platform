@@ -1,9 +1,5 @@
 $ErrorActionPreference = 'Stop'
-if (-not (Test-Path '.env')) {
-  Copy-Item '.env.example' '.env'
-  Write-Host 'Created .env. Edit POSTGRES_PASSWORD and REDIS_PASSWORD, then run this script again.' -ForegroundColor Yellow
-  exit 0
-}
+if (-not (Test-Path '.env')) { Copy-Item '.env.example' '.env'; Write-Host 'Created .env. Edit passwords and run this script again.' -ForegroundColor Yellow; exit 0 }
 & "$PSScriptRoot/check-local-ports.ps1"
 docker compose --env-file .env config | Out-Null
 docker compose --env-file .env up -d --build

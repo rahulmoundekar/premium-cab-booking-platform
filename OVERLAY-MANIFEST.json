@@ -1,0 +1,23 @@
+{
+  "app": "Suabhi Cab Booking",
+  "note": "Overlay files for the independently bootstrapped GitHub repository. Extract into repository root, replacing same-path files.",
+  "fileCount": 640,
+  "totalBytes": 67391678,
+  "adminSourceFiles": 395,
+  "customerTemplatePages": 47,
+  "customerThemeAssetFiles": 195,
+  "ports": {
+    "postgres": 55432,
+    "redis": 56379,
+    "api": 58080,
+    "customer": 53000,
+    "admin": 53001,
+    "driver": 53002
+  },
+  "adminDemoSafety": "Demo login is explicitly gated by VITE_DEMO_MODE; local loopback only. The bundled Vite credential is not a secret.",
+  "frontends": {
+    "customer": "Next.js serving Rentaly static theme pages/assets",
+    "admin": "React 19 + Vite + Material UI template",
+    "driver": "Next.js PWA starter"
+  }
+}
