@@ -1,7 +1,13 @@
-FROM node:22-alpine AS build
+FROM node:22-bookworm-slim AS build
 WORKDIR /app
 COPY package.json package-lock.json ./
-RUN npm ci --no-audit --no-fund
+RUN node --version \
+ && npm --version \
+ && npm ci --no-audit --no-fund \
+      --fetch-retries=5 \
+      --fetch-retry-mintimeout=20000 \
+      --fetch-retry-maxtimeout=120000 \
+      --fetch-timeout=300000
 COPY . .
 ARG VITE_API_BASE_URL=http://localhost:58080/api/v1
 ARG VITE_BACKEND=false
