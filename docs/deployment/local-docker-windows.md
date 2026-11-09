@@ -131,3 +131,22 @@ Do not use `docker system prune --volumes` to troubleshoot this project; it can 
 The Compose file binds host ports to `127.0.0.1`; place a TLS-terminating reverse proxy or private-cloud ingress in front of the web/API services. For a non-local deployment, use a secret manager, real TLS certificates, `SESSION_COOKIE_SECURE=true`, `CSRF_COOKIE_SECURE=true`, `HSTS_ENABLED=true`, exact CORS origins, backups and restricted database access. Do not publish PostgreSQL or Redis to the public network.
 
 The admin workspace's demo mode must be disabled, and identity/authorization APIs must be completed before the operations console is exposed to users. The customer Rentaly forms and driver PWA are currently UI foundations, not production booking/trip flows.
+
+
+## Admin dependency lockfile repair
+
+The admin template's original lockfile contained four incorrect transitive versions (0.1.0). The branch lockfile is repaired to the versions that match the template's original dependency graph: d3-interpolate 3.0.1, d3-ease 3.0.1, d3-timer 3.0.1 and json-buffer 3.0.1. Keep package.json and package-lock.json together; do not delete the lockfile.
+
+After pulling the latest feature branch and extracting the corrected template overlay, rebuild only the admin image first:
+
+```powershell
+git pull origin feature/phase-1-foundation
+docker compose build --no-cache --progress=plain admin-web
+```
+
+If npm ci succeeds, rebuild/start the stack:
+
+```powershell
+docker compose --env-file .env up -d --build
+docker compose ps
+```
