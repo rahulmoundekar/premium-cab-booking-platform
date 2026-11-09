@@ -29,6 +29,7 @@ public class SecurityConfig {
     @Bean
     CookieCsrfTokenRepository csrfTokenRepository(SecurityProperties securityProperties) {
         CookieCsrfTokenRepository repository = CookieCsrfTokenRepository.withHttpOnlyFalse();
+        repository.setCookieName("SUABHI-XSRF-TOKEN");
         repository.setCookieCustomizer(cookie -> cookie.path("/").sameSite("Lax")
                 .secure(securityProperties.csrfCookieSecure()));
         return repository;
@@ -45,7 +46,7 @@ public class SecurityConfig {
             @Qualifier("corsConfigurationSource") CorsConfigurationSource corsSource,
             @Qualifier("csrfTokenRepository") CookieCsrfTokenRepository csrfRepository,
             @Qualifier("securityContextRepository") SecurityContextRepository contextRepository,
-            AuthenticationProvider authenticationProvider,
+            @Qualifier("appUserAuthenticationProvider") AuthenticationProvider authenticationProvider,
             SecurityProperties securityProperties) throws Exception {
 
         CsrfTokenRequestAttributeHandler csrfRequestHandler = new CsrfTokenRequestAttributeHandler();
