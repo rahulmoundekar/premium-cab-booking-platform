@@ -9,4 +9,5 @@ dist/
 .idea/
 .vscode/
 *.log
+*.zip
 coverage/
