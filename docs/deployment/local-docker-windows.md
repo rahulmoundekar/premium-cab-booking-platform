@@ -37,7 +37,7 @@ docker version
 docker compose version
 Copy-Item .env.example .env
 notepad .env
-.scripts\check-local-ports.ps1
+.\scripts\check-local-ports.ps1
 docker compose --env-file .env config
 docker compose --env-file .env up -d --build
 docker compose ps
