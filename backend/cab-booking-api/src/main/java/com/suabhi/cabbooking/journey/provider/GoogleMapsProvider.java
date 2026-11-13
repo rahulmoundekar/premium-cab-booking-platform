@@ -1,6 +1,6 @@
 package com.suabhi.cabbooking.journey.provider;
 
-import com.fasterxml.jackson.databind.JsonNode;
+import tools.jackson.databind.JsonNode;
 import com.suabhi.cabbooking.journey.config.GoogleMapsProperties;
 import java.math.BigDecimal;
 import java.net.URI;
