@@ -26,14 +26,14 @@ public class FareQuoteRepository {
                 INSERT INTO fare_quotes
                 (id, customer_id, rate_card_id, rate_card_code, rate_card_version,
                  service_type, operating_city, vehicle_category_id, vehicle_category_code,
-                 departure_at, currency, distance_meters, duration_seconds, total_amount,
+                 departure_at, rental_hours, currency, distance_meters, duration_seconds, total_amount,
                  created_at, expires_at, response_snapshot)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CAST(? AS JSONB))
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CAST(? AS JSONB))
                 """,
                 response.id(), customerId, rateCard.id(), rateCard.code(), rateCard.version(),
                 rateCard.serviceType().name(), rateCard.operatingCity().name(),
                 rateCard.vehicleCategoryId(), rateCard.vehicleCategoryCode(),
-                Timestamp.from(response.journey().departureAt()), rateCard.currency(),
+                Timestamp.from(response.journey().departureAt()), response.rentalHours(), rateCard.currency(),
                 response.journey().distanceMeters(), response.journey().durationSeconds(),
                 response.fare().totalAmount(), Timestamp.from(response.createdAt()),
                 Timestamp.from(response.expiresAt()), snapshot);
