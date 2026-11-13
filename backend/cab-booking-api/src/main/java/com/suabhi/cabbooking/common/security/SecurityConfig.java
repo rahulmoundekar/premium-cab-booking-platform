@@ -2,7 +2,12 @@ package com.suabhi.cabbooking.common.security;
 
 import com.suabhi.cabbooking.common.config.CorsProperties;
 import com.suabhi.cabbooking.common.config.SecurityProperties;
+import jakarta.servlet.http.Cookie;
+import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.util.Arrays;
 import java.util.List;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
@@ -71,7 +76,7 @@ public class SecurityConfig {
                     .anyRequest().authenticated())
             .exceptionHandling(exceptions -> exceptions
                     .authenticationEntryPoint((request, response, exception) -> {
-                        if (hasCause(exception, CsrfException.class)) {
+                        if (isUnsafeMethod(request) && !hasMatchingCsrfCookieAndHeader(request)) {
                             response.sendError(HttpServletResponse.SC_FORBIDDEN,
                                     "CSRF validation failed");
                         } else {
@@ -96,13 +101,26 @@ public class SecurityConfig {
         return http.build();
     }
 
-    private static boolean hasCause(Throwable exception, Class<? extends Throwable> type) {
-        for (Throwable cause = exception; cause != null; cause = cause.getCause()) {
-            if (type.isInstance(cause)) {
-                return true;
-            }
+    private static boolean isUnsafeMethod(HttpServletRequest request) {
+        String method = request.getMethod();
+        return !("GET".equals(method) || "HEAD".equals(method)
+                || "TRACE".equals(method) || "OPTIONS".equals(method));
+    }
+
+    private static boolean hasMatchingCsrfCookieAndHeader(HttpServletRequest request) {
+        String headerToken = request.getHeader("X-XSRF-TOKEN");
+        if (headerToken == null || headerToken.isBlank() || request.getCookies() == null) {
+            return false;
         }
-        return false;
+
+        return Arrays.stream(request.getCookies())
+                .filter(cookie -> "SUABHI-XSRF-TOKEN".equals(cookie.getName()))
+                .findFirst()
+                .map(Cookie::getValue)
+                .filter(cookieToken -> MessageDigest.isEqual(
+                        cookieToken.getBytes(StandardCharsets.UTF_8),
+                        headerToken.getBytes(StandardCharsets.UTF_8)))
+                .isPresent();
     }
 
     @Bean
