@@ -29,6 +29,7 @@ public class RateCardService {
     private final VehicleCategoryRepository vehicleCategoryRepository;
     private final Clock clock;
 
+    @org.springframework.beans.factory.annotation.Autowired
     public RateCardService(PricingRateCardRepository rateCardRepository,
                            VehicleCategoryRepository vehicleCategoryRepository) {
         this(rateCardRepository, vehicleCategoryRepository, Clock.systemUTC());
