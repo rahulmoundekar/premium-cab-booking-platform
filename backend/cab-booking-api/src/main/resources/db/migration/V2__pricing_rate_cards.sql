@@ -1,3 +1,5 @@
+CREATE EXTENSION IF NOT EXISTS btree_gist;
+
 CREATE TABLE pricing_rate_cards (
   id UUID PRIMARY KEY,
   code VARCHAR(80) NOT NULL,
@@ -63,3 +65,14 @@ CREATE INDEX ix_pricing_rate_card_components_order
   ON pricing_rate_card_components(rate_card_id, display_order, component_code);
 
 -- No commercial rate cards are seeded. Rates must be supplied and approved by the business.
+
+-- Protect activation against concurrent overlapping rate-card writes as well as service-level checks.
+ALTER TABLE pricing_rate_cards
+  ADD CONSTRAINT ex_pricing_rate_cards_active_period
+  EXCLUDE USING GIST (
+    service_type WITH =,
+    operating_city WITH =,
+    vehicle_category_id WITH =,
+    tstzrange(effective_from, effective_until, '[)') WITH &&
+  )
+  WHERE (active);
