@@ -25,7 +25,7 @@ Standalone premium cab-booking platform for Pune and Mumbai. This repository has
 | POST | `/api/v1/auth/logout` | End the session |
 | GET/PATCH | `/api/v1/customer/profile` | Read/update customer profile |
 
-Booking, fare calculation, payments, driver assignment, live tracking, account recovery and email verification are not implemented yet.
+Booking creation/lifecycle, payments, driver assignment and live tracking are not implemented yet. Customer fare-quote persistence and calculation are implemented behind the journey provider; live route-based quotes return HTTP 503 until a real route/geocoding provider is configured. Account recovery and email verification are also pending.
 
 ### Authentication and security baseline
 
