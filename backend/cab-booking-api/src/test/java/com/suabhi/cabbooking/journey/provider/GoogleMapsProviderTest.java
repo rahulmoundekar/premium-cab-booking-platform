@@ -138,6 +138,7 @@ class GoogleMapsProviderTest {
                         "routes.distanceMeters,routes.duration,routes.polyline.encodedPolyline"))
                 .andExpect(jsonPath("$.travelMode").value("DRIVE"))
                 .andExpect(jsonPath("$.intermediates[0].location.latLng.latitude").value(18.5308))
+                .andExpect(jsonPath("$.intermediates[1].location.latLng.latitude").value(18.7500))
                 .andExpect(jsonPath("$.destination.location.latLng.longitude").value(72.8777))
                 .andRespond(withSuccess("""
                         {
@@ -155,6 +156,7 @@ class GoogleMapsProviderTest {
                 Instant.parse("2027-01-15T03:00:00Z"),
                 List.of(
                         new GeocodingProvider.ResolvedPlace("Pune", "pune", 18.5204, 73.8567),
+                        new GeocodingProvider.ResolvedPlace("Shivajinagar", "shivajinagar", 18.5308, 73.8475),
                         new GeocodingProvider.ResolvedPlace("Lonavala", "lonavala", 18.7500, 73.4060),
                         new GeocodingProvider.ResolvedPlace("Mumbai", "mumbai", 19.0760, 72.8777)
                 )
