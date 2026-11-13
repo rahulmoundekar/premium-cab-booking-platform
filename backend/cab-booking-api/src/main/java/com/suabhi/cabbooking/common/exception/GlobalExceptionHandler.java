@@ -11,6 +11,7 @@ import org.springframework.validation.FieldError;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.server.ResponseStatusException;
 
 @RestControllerAdvice
 public class GlobalExceptionHandler {
@@ -25,6 +26,15 @@ public class GlobalExceptionHandler {
             errors.putIfAbsent(error.getField(), error.getDefaultMessage());
         }
         return response(HttpStatus.BAD_REQUEST, "Request validation failed", request, errors);
+    }
+    @ExceptionHandler(ResponseStatusException.class)
+    ResponseEntity<ApiError> handleResponseStatus(ResponseStatusException ex, HttpServletRequest request) {
+        HttpStatus status = HttpStatus.resolve(ex.getStatusCode().value());
+        String reason = status == null ? "Request Failed" : status.getReasonPhrase();
+        String message = ex.getReason() == null ? reason : ex.getReason();
+        return ResponseEntity.status(ex.getStatusCode()).body(new ApiError(
+                Instant.now(), ex.getStatusCode().value(), reason, message,
+                request.getRequestURI(), Map.of()));
     }
     @ExceptionHandler(IllegalArgumentException.class)
     ResponseEntity<ApiError> handleBadRequest(IllegalArgumentException ex, HttpServletRequest request) {
