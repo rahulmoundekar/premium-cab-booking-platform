@@ -19,6 +19,7 @@ public record FareQuoteResponse(
         UUID id,
         Instant createdAt,
         Instant expiresAt,
+        Integer rentalHours,
         JourneyPreviewResponse journey,
         RateCardSnapshot rateCard,
         FareCalculationResult fare
