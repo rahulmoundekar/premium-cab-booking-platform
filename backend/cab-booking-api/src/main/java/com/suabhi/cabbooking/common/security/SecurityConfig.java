@@ -73,7 +73,7 @@ public class SecurityConfig {
                             HttpServletResponse.SC_UNAUTHORIZED, "Authentication required"))
                     .accessDeniedHandler((request, response, exception) ->
                             response.sendError(HttpServletResponse.SC_FORBIDDEN,
-                                    "Missing or invalid CSRF token")))
+                                    "Access denied")))
             .headers(headers -> {
                 headers.frameOptions(frame -> frame.deny());
                 headers.contentTypeOptions(Customizer.withDefaults());
