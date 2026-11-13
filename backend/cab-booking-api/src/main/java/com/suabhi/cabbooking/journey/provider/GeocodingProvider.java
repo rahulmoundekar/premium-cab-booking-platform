@@ -32,19 +32,28 @@ public interface GeocodingProvider {
         }
     }
 
+    /**
+     * Autocomplete suggestions do not necessarily include coordinates.
+     * Coordinates are resolved server-side after the customer selects a suggestion.
+     */
     record PlaceSuggestion(
             String providerReference,
             String displayName,
             String formattedAddress,
-            double latitude,
-            double longitude
+            Double latitude,
+            Double longitude
     ) {
         public PlaceSuggestion {
             if (displayName == null || displayName.isBlank()
                     || formattedAddress == null || formattedAddress.isBlank()) {
                 throw new IllegalArgumentException("A place suggestion must include a display name and address.");
             }
-            validateCoordinates(latitude, longitude);
+            if ((latitude == null) != (longitude == null)) {
+                throw new IllegalArgumentException("Suggestion coordinates must be provided together.");
+            }
+            if (latitude != null) {
+                validateCoordinates(latitude, longitude);
+            }
         }
     }
 
