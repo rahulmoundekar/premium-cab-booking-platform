@@ -10,6 +10,7 @@ import java.util.List;
 import org.springframework.stereotype.Service;
 
 @Service
+@org.springframework.modulith.NamedInterface("preview")
 public class JourneyPreviewService {
     private final GeocodingProvider geocodingProvider;
     private final RouteProvider routeProvider;
