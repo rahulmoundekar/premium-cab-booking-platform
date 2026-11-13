@@ -1,8 +1,7 @@
 package com.suabhi.cabbooking.pricing.service;
 
 import com.suabhi.cabbooking.common.exception.ResourceNotFoundException;
-import com.suabhi.cabbooking.fleet.domain.VehicleCategory;
-import com.suabhi.cabbooking.fleet.repository.VehicleCategoryRepository;
+import com.suabhi.cabbooking.fleet.FleetCategoryCatalog;
 import com.suabhi.cabbooking.journey.provider.City;
 import com.suabhi.cabbooking.journey.provider.ServiceType;
 import com.suabhi.cabbooking.pricing.api.RateCardWriteRequest;
@@ -26,25 +25,25 @@ import org.springframework.web.server.ResponseStatusException;
 @Transactional
 public class RateCardService {
     private final PricingRateCardRepository rateCardRepository;
-    private final VehicleCategoryRepository vehicleCategoryRepository;
+    private final FleetCategoryCatalog fleetCategoryCatalog;
     private final Clock clock;
 
     @org.springframework.beans.factory.annotation.Autowired
     public RateCardService(PricingRateCardRepository rateCardRepository,
-                           VehicleCategoryRepository vehicleCategoryRepository) {
-        this(rateCardRepository, vehicleCategoryRepository, Clock.systemUTC());
+                           FleetCategoryCatalog fleetCategoryCatalog) {
+        this(rateCardRepository, fleetCategoryCatalog, Clock.systemUTC());
     }
 
     RateCardService(PricingRateCardRepository rateCardRepository,
-                    VehicleCategoryRepository vehicleCategoryRepository, Clock clock) {
+                    FleetCategoryCatalog fleetCategoryCatalog, Clock clock) {
         this.rateCardRepository = rateCardRepository;
-        this.vehicleCategoryRepository = vehicleCategoryRepository;
+        this.fleetCategoryCatalog = fleetCategoryCatalog;
         this.clock = clock;
     }
 
     public PricingRateCard create(RateCardWriteRequest request) {
         String categoryCode = request.vehicleCategoryCode().strip().toUpperCase(Locale.ROOT);
-        VehicleCategory category = vehicleCategoryRepository.findByCodeAndActiveTrue(categoryCode)
+        FleetCategoryCatalog.CategoryReference category = fleetCategoryCatalog.findActiveCategory(categoryCode)
                 .orElseThrow(() -> new ResourceNotFoundException(
                         "Active vehicle category not found: " + categoryCode));
 
