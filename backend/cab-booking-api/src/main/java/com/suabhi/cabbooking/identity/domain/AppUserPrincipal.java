@@ -7,6 +7,7 @@ import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.userdetails.UserDetails;
 
+@org.springframework.modulith.NamedInterface("principal")
 public final class AppUserPrincipal implements UserDetails {
     private final UUID id;
     private final String email;
