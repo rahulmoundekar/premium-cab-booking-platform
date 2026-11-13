@@ -95,6 +95,17 @@ public class RateCardService {
         return rateCardRepository.findAll();
     }
 
+    public PricingRateCard findEffectiveActive(
+            ServiceType serviceType, City city, String categoryCode, Instant effectiveAt) {
+        String normalizedCode = categoryCode == null ? "" : categoryCode.strip().toUpperCase(Locale.ROOT);
+        FleetCategoryCatalog.CategoryReference category = fleetCategoryCatalog.findActiveCategory(normalizedCode)
+                .orElseThrow(() -> new ResourceNotFoundException(
+                        "Active vehicle category not found: " + normalizedCode));
+        return rateCardRepository.findEffectiveActive(serviceType, city, category.id(), effectiveAt)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.UNPROCESSABLE_ENTITY,
+                        "No active rate card is configured for the requested service, city, vehicle category and departure time."));
+    }
+
     public PricingRateCard activate(UUID id) {
         PricingRateCard card = rateCardRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Pricing rate card was not found."));
