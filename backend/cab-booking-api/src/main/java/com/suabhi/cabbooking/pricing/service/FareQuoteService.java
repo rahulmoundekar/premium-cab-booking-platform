@@ -2,6 +2,7 @@ package com.suabhi.cabbooking.pricing.service;
 
 import com.suabhi.cabbooking.common.exception.ResourceNotFoundException;
 import com.suabhi.cabbooking.journey.api.JourneyPreviewResponse;
+import com.suabhi.cabbooking.journey.provider.City;
 import com.suabhi.cabbooking.journey.service.JourneyPreviewService;
 import com.suabhi.cabbooking.pricing.api.FareQuoteRequest;
 import com.suabhi.cabbooking.pricing.api.FareQuoteResponse;
@@ -18,7 +19,6 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 @Service
-@Transactional
 public class FareQuoteService {
     private static final Duration QUOTE_VALIDITY = Duration.ofMinutes(15);
 
@@ -59,7 +59,7 @@ public class FareQuoteService {
         // Tariff effective dates are evaluated against the scheduled departure, not client-supplied prices.
         PricingRateCard rateCard = rateCardService.findEffectiveActive(
                 journey.serviceType(),
-                com.suabhi.cabbooking.journey.provider.City.valueOf(journey.originCity()),
+                City.valueOf(journey.originCity()),
                 request.vehicleCategoryCode(),
                 journey.departureAt());
 
