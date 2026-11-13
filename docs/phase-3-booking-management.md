@@ -304,3 +304,40 @@ The pricing unit tests cover airport minimum fare and surcharge/tax calculations
 The Pricing module depends only on the named `journey::types` interface for the shared `City` and `ServiceType` enums. It does not depend on Journey's provider implementations.
 
 Vehicle-category validation uses the public `fleet.FleetCategoryCatalog` contract. Fleet keeps its JPA entity and repository internal; Pricing receives only a category UUID and code. The module-structure verification test remains enabled and should be run as part of `mvn clean verify`.
+
+
+## Phase 3.3 — Customer fare quote snapshots
+
+The customer quote slice is implemented on `feature/phase-3-booking-management`.
+
+### Customer API
+
+| Method | Endpoint | Purpose |
+|---|---|---|
+| POST | `/api/v1/customer/quotes` | Resolve the journey, select the rate card effective at departure, calculate and persist a quote |
+| GET | `/api/v1/customer/quotes/{quoteId}` | Retrieve a quote only for its owning authenticated customer |
+
+The create request contains a nested `journey` object using the journey-preview request contract, a `vehicleCategoryCode`, and `rentalHours` only for `LOCAL_RENTAL`. It deliberately accepts no distance, duration, coordinates as authoritative metrics, or fare amount. Place references/addresses are resolved by the server and the route adapter calculates distance and duration.
+
+### Calculation and tariff selection
+
+- The server selects an active rate card matching service type, operating city and active vehicle category, with an effective period covering the scheduled departure.
+- The pricing engine receives only route metrics returned by the server-side journey preview service.
+- Local rental requires an explicit positive package duration. Other service types reject a rental-hours value.
+- A quote is valid for 15 minutes from creation.
+- The quote response snapshots the resolved journey and route reference, the complete rate-card version and components, and the calculated fare breakdown.
+- The database stores indexed ownership/tariff/route/amount/expiry fields plus the complete immutable JSONB response snapshot.
+- Quote retrieval filters by both quote ID and authenticated customer ID. A quote belonging to another customer is returned as not found.
+- No update endpoint is provided for quote snapshots. Later rate-card changes do not rewrite an existing quote.
+
+### Provider and operational boundary
+
+Google Maps remains disabled by default. Until a real geocoding and route provider is enabled, the journey preview adapter returns HTTP 503; quote creation consequently does not persist a quote or invent route metrics. Unit tests use mocked provider results and do not call Google APIs.
+
+No commercial tariff values are seeded. The test rate cards used for local verification are synthetic and must be removed before operational pricing configuration.
+
+### Migration and verification
+
+Flyway migration `V3__fare_quotes.sql` adds `fare_quotes`, with customer/rate-card/category foreign keys, route metric and amount checks, an expiry check and indexes for customer history, expiry cleanup and rate-card tracing.
+
+The quote service tests verify the immutable journey/rate-card/fare snapshot, the 15-minute expiry, the fare breakdown, persistence invocation and ownership filtering. Run `mvn clean verify` and validate Flyway V3 against the local PostgreSQL 18 + PostGIS database before runtime testing.
