@@ -114,10 +114,18 @@ public class BookingRepository {
 
     private void recordEvent(UUID actorId, BookingResponse booking, String eventType,
                              BookingStatus previousStatus) {
-        String metadata = writeValue(Map.of(
+        Map<String, Object> eventData = Map.of(
                 "bookingReference", booking.bookingReference(),
-                "quoteId", booking.quote().id().toString()));
-        String snapshot = writeSnapshot(booking);
+                "quoteId", booking.quote().id().toString(),
+                "status", booking.status().name(),
+                "serviceType", booking.quote().journey().serviceType().name(),
+                "operatingCity", booking.quote().journey().originCity(),
+                "currency", booking.quote().fare().currency(),
+                "totalAmount", booking.quote().fare().totalAmount());
+        String metadata = writeValue(eventData);
+        String beforeState = previousStatus == null ? null
+                : writeValue(Map.of("status", previousStatus.name()));
+        String afterState = writeValue(eventData);
         Timestamp occurredAt = Timestamp.from(booking.updatedAt());
 
         jdbcTemplate.update("""
@@ -131,17 +139,17 @@ public class BookingRepository {
 
         jdbcTemplate.update("""
                 INSERT INTO audit_logs
-                (id, actor_user_id, action, aggregate_type, aggregate_id, after_state, occurred_at)
-                VALUES (?, ?, ?, 'BOOKING', ?, CAST(? AS JSONB), ?)
+                (id, actor_user_id, action, aggregate_type, aggregate_id, before_state, after_state, occurred_at)
+                VALUES (?, ?, ?, 'BOOKING', ?, CAST(? AS JSONB), CAST(? AS JSONB), ?)
                 """,
-                UUID.randomUUID(), actorId, eventType, booking.id().toString(), snapshot, occurredAt);
+                UUID.randomUUID(), actorId, eventType, booking.id().toString(), beforeState, afterState, occurredAt);
 
         jdbcTemplate.update("""
                 INSERT INTO outbox_events
                 (id, aggregate_type, aggregate_id, event_type, payload, event_status, occurred_at, next_attempt_at)
                 VALUES (?, 'BOOKING', ?, ?, CAST(? AS JSONB), 'PENDING', ?, ?)
                 """,
-                UUID.randomUUID(), booking.id().toString(), eventType, snapshot, occurredAt, occurredAt);
+                UUID.randomUUID(), booking.id().toString(), eventType, metadata, occurredAt, occurredAt);
     }
 
     private Optional<BookingResponse> findOne(String sql, Object... args) {
