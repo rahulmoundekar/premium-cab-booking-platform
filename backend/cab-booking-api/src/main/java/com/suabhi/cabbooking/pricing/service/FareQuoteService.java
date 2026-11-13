@@ -19,6 +19,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 @Service
+@org.springframework.modulith.NamedInterface("quotes")
 public class FareQuoteService {
     private static final Duration QUOTE_VALIDITY = Duration.ofMinutes(15);
 
