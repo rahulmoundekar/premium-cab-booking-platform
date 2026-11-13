@@ -341,3 +341,68 @@ No commercial tariff values are seeded. The test rate cards used for local verif
 Flyway migration `V3__fare_quotes.sql` adds `fare_quotes`, with customer/rate-card/category foreign keys, route metric and amount checks, an expiry check and indexes for customer history, expiry cleanup and rate-card tracing.
 
 The quote service tests verify the immutable journey/rate-card/fare snapshot, the 15-minute expiry, the fare breakdown, persistence invocation and ownership filtering. Run `mvn clean verify` and validate Flyway V3 against the local PostgreSQL 18 + PostGIS database before runtime testing.
+
+
+## Phase 3.4 — Customer booking lifecycle
+
+The initial booking lifecycle is implemented in the independent `booking` Spring Modulith module.
+
+### Customer API
+
+| Method | Endpoint | Purpose |
+|---|---|---|
+| POST | `/api/v1/customer/bookings` | Create a booking from an owned, unexpired quote; requires the `Idempotency-Key` header |
+| GET | `/api/v1/customer/bookings` | List the authenticated customer's bookings |
+| GET | `/api/v1/customer/bookings/{bookingId}` | Read one booking owned by the authenticated customer |
+| POST | `/api/v1/customer/bookings/{bookingId}/cancel` | Cancel a booking while it is pending confirmation |
+
+Create request:
+
+```json
+{
+  "quoteId": "UUID-from-an-unexpired-customer-quote"
+}
+```
+
+The customer identity always comes from the authenticated session. A quote ID is not accepted as proof of ownership. Both the service and a composite database foreign key require the quote to belong to the same customer who creates the booking.
+
+### Transactional guarantees
+
+- A quote must exist for the authenticated customer and its 15-minute validity window must not have expired.
+- A quote can be converted into at most one booking; the database enforces uniqueness on `quote_id`.
+- A customer's `Idempotency-Key` is unique. A retry with the same key and same quote returns the original booking. Reusing the key with a different quote returns HTTP 409.
+- Concurrent create attempts are arbitrated by the unique customer/idempotency and quote constraints. A losing request returns the committed booking for an identical replay or HTTP 409 for a conflicting use.
+- Booking creation, the first `booking_events` row, the audit-log entry and the outbox event are written in the same database transaction.
+- The booking stores the complete immutable quote snapshot. Later changes to rate cards do not change a booking's accepted fare or journey.
+- Audit and outbox metadata intentionally contain booking/tariff summary fields rather than pickup/drop-off addresses or other location PII.
+
+### Initial lifecycle policy
+
+- A newly created booking is `PENDING_CONFIRMATION`. It is not represented as confirmed because fleet availability and dispatch confirmation are not yet implemented.
+- A customer may cancel only a `PENDING_CONFIRMATION` booking.
+- Repeating cancellation on an already cancelled booking is idempotent.
+- Cancellation of any other state returns HTTP 409.
+- Payment, cancellation fees/windows, administrator confirmation/rejection, vehicle assignment and driver dispatch are not implemented in this slice. No cancellation fee is invented.
+
+### Persistence
+
+Flyway migration `V4__booking_lifecycle.sql` adds:
+
+- `bookings`: customer ownership, unique quote consumption, unique customer idempotency key, booking reference, status, summary columns and immutable JSONB snapshot.
+- `booking_events`: append-only state transition history with actor and safe metadata.
+- A composite foreign key from `(quote_id, customer_id)` to `fare_quotes(id, customer_id)` enforces quote ownership at the database layer.
+
+Every create/cancel write also adds an `audit_logs` record and a pending `outbox_events` record in the same transaction. Outbox delivery/worker processing is a later infrastructure increment.
+
+### Verification targets
+
+- New booking from an owned and unexpired quote returns HTTP 201 and `PENDING_CONFIRMATION`.
+- Same idempotency key and same quote returns the original booking; same key with a different quote returns HTTP 409.
+- A quote already converted by a different key returns HTTP 409.
+- Expired and foreign-owned quotes cannot be booked.
+- Customer A cannot read/cancel Customer B's booking.
+- Pending booking cancellation succeeds; repeat cancellation is harmless; other statuses are rejected.
+- Concurrent insert constraints prevent duplicate booking per quote or customer idempotency key.
+- Booking, event, audit and outbox rows commit or roll back together.
+
+The quote provider remains configured as HTTP 503 while Google Maps is disabled. Runtime booking creation therefore needs a valid persisted quote; do not seed a fabricated route or fare merely to bypass provider configuration. A controlled test fixture can be inserted only in an isolated test database or using the test profile.
