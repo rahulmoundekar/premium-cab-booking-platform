@@ -79,6 +79,25 @@ public class PricingRateCardRepository {
         return cards.stream().findFirst().map(this::withComponents);
     }
 
+    public Optional<PricingRateCard> findEffectiveActive(
+            ServiceType serviceType, City city, UUID vehicleCategoryId, Instant effectiveAt) {
+        List<PricingRateCard> cards = jdbcTemplate.query(
+                SELECT_RATE_CARD + """
+                 WHERE rc.service_type = ?
+                   AND rc.operating_city = ?
+                   AND rc.vehicle_category_id = ?
+                   AND rc.active = TRUE
+                   AND rc.effective_from <= ?
+                   AND (rc.effective_until IS NULL OR rc.effective_until > ?)
+                 ORDER BY rc.effective_from DESC, rc.version DESC
+                 LIMIT 1
+                """,
+                (rs, rowNum) -> mapRateCard(rs),
+                serviceType.name(), city.name(), vehicleCategoryId,
+                Timestamp.from(effectiveAt), Timestamp.from(effectiveAt));
+        return cards.stream().findFirst().map(this::withComponents);
+    }
+
     public boolean hasOverlappingActiveRateCard(PricingRateCard card) {
         Boolean exists = jdbcTemplate.queryForObject("""
                 SELECT EXISTS (
