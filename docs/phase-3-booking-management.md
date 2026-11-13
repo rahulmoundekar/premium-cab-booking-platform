@@ -297,3 +297,10 @@ This increment delivers rate-card administration and tested fare calculation rul
 ### Verification
 
 The pricing unit tests cover airport minimum fare and surcharge/tax calculations, outstation ceiling-day and driver-allowance calculations, local-rental included-hour and kilometre handling, service/city mismatch rejection, inactive cards, and rate-card activation overlap/expiry rules. Run the complete API test suite and validate Flyway V2 against the local PostgreSQL 18 + PostGIS database before proceeding to quote persistence.
+
+
+### Modulith boundaries
+
+The Pricing module depends only on the named `journey::types` interface for the shared `City` and `ServiceType` enums. It does not depend on Journey's provider implementations.
+
+Vehicle-category validation uses the public `fleet.FleetCategoryCatalog` contract. Fleet keeps its JPA entity and repository internal; Pricing receives only a category UUID and code. The module-structure verification test remains enabled and should be run as part of `mvn clean verify`.
