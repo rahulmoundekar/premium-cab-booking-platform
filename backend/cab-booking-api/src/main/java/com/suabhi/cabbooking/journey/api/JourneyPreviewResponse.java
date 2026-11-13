@@ -6,6 +6,7 @@ import com.suabhi.cabbooking.journey.provider.ServiceType;
 import java.time.Instant;
 import java.util.List;
 
+@org.springframework.modulith.NamedInterface("preview")
 public record JourneyPreviewResponse(
         ServiceType serviceType,
         String originCity,
