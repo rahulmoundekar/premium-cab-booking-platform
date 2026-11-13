@@ -1,11 +1,39 @@
 {
   "app": "Suabhi Cab Booking",
-  "note": "Overlay files for the independently bootstrapped GitHub repository. Extract into repository root, replacing same-path files.",
-  "fileCount": 640,
-  "totalBytes": 67391678,
-  "adminSourceFiles": 395,
-  "customerTemplatePages": 47,
-  "customerThemeAssetFiles": 195,
+  "purpose": "Current repository inventory; this file is not an overlay extraction manifest.",
+  "generatedFromBranch": "feature/phase-1-foundation",
+  "trackedFileCount": 508,
+  "trackedBytes": 50568435,
+  "applications": {
+    "backend": {
+      "path": "backend/cab-booking-api",
+      "java": 21,
+      "springBoot": "4.x",
+      "persistence": "PostgreSQL 18 + PostGIS",
+      "cache": "Redis"
+    },
+    "customer": {
+      "path": "frontend/apps/customer-web",
+      "framework": "Next.js",
+      "trackedFiles": 18,
+      "bytes": 37442,
+      "implementation": "Original Suabhi interface; copied Rentaly/Designesia assets are not included."
+    },
+    "admin": {
+      "path": "frontend/apps/admin-web",
+      "framework": "React 19 + Vite + Material UI",
+      "trackedFiles": 425,
+      "bytes": 50439450,
+      "license": "MIT; retain frontend/apps/admin-web/LICENSE.txt",
+      "demoMode": "Local preview only; demo credentials are bundled client-side and must not be treated as secure."
+    },
+    "driver": {
+      "path": "frontend/apps/driver-web",
+      "framework": "Next.js PWA starter",
+      "trackedFiles": 9,
+      "bytes": 5645
+    }
+  },
   "ports": {
     "postgres": 55432,
     "redis": 56379,
@@ -14,10 +42,13 @@
     "admin": 53001,
     "driver": 53002
   },
-  "adminDemoSafety": "Demo login is explicitly gated by VITE_DEMO_MODE; local loopback only. The bundled Vite credential is not a secret.",
-  "frontends": {
-    "customer": "Next.js serving Rentaly static theme pages/assets",
-    "admin": "React 19 + Vite + Material UI template",
-    "driver": "Next.js PWA starter"
-  }
+  "notImplemented": [
+    "booking management",
+    "fare estimation",
+    "payments",
+    "dispatch",
+    "live driver tracking",
+    "email verification",
+    "account recovery"
+  ]
 }
