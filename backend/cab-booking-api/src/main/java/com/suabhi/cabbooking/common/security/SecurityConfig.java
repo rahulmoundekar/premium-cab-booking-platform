@@ -54,10 +54,7 @@ public class SecurityConfig {
 
         http.cors(cors -> cors.configurationSource(corsSource))
             .csrf(csrf -> csrf.csrfTokenRepository(csrfRepository)
-                    .csrfTokenRequestHandler(csrfRequestHandler)
-                    .accessDeniedHandler((request, response, exception) ->
-                            response.sendError(HttpServletResponse.SC_FORBIDDEN,
-                                    "Missing or invalid CSRF token")))
+                    .csrfTokenRequestHandler(csrfRequestHandler))
             .securityContext(context -> context.securityContextRepository(contextRepository)
                     .requireExplicitSave(true))
             .authenticationProvider(authenticationProvider)
@@ -71,9 +68,12 @@ public class SecurityConfig {
                     .requestMatchers("/api/v1/auth/me", "/api/v1/auth/logout").authenticated()
                     .requestMatchers("/api/v1/customer/**").hasRole("CUSTOMER")
                     .anyRequest().authenticated())
-            .exceptionHandling(exceptions -> exceptions.authenticationEntryPoint(
-                    (request, response, exception) -> response.sendError(
-                            HttpServletResponse.SC_UNAUTHORIZED, "Authentication required")))
+            .exceptionHandling(exceptions -> exceptions
+                    .authenticationEntryPoint((request, response, exception) -> response.sendError(
+                            HttpServletResponse.SC_UNAUTHORIZED, "Authentication required"))
+                    .accessDeniedHandler((request, response, exception) ->
+                            response.sendError(HttpServletResponse.SC_FORBIDDEN,
+                                    "Missing or invalid CSRF token")))
             .headers(headers -> {
                 headers.frameOptions(frame -> frame.deny());
                 headers.contentTypeOptions(Customizer.withDefaults());
