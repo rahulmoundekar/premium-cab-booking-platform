@@ -2,6 +2,7 @@ package com.suabhi.cabbooking.journey.service;
 
 import com.suabhi.cabbooking.journey.api.JourneyPreviewRequest;
 import com.suabhi.cabbooking.journey.api.JourneyPreviewResponse;
+import com.suabhi.cabbooking.journey.provider.City;
 import com.suabhi.cabbooking.journey.provider.GeocodingProvider;
 import com.suabhi.cabbooking.journey.provider.RouteProvider;
 import java.util.ArrayList;
@@ -19,7 +20,7 @@ public class JourneyPreviewService {
     }
 
     public List<GeocodingProvider.PlaceSuggestion> searchPlaces(String query,
-                                                                  com.suabhi.cabbooking.journey.provider.City city) {
+                                                                  City city) {
         String normalizedQuery = query == null ? "" : query.strip();
         if (normalizedQuery.length() < 3 || normalizedQuery.length() > 160) {
             throw new IllegalArgumentException("Place search query must contain between 3 and 160 characters.");
