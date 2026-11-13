@@ -127,6 +127,24 @@ class BookingServiceTest {
     }
 
     @Test
+    void rejectsBookingWhenScheduledDepartureHasPassed() {
+        UUID customerId = UUID.randomUUID();
+        UUID quoteId = UUID.randomUUID();
+        String key = "booking-test-departed";
+        when(bookingRepository.findByCustomerAndIdempotencyKey(customerId, key)).thenReturn(Optional.empty());
+        when(fareQuoteService.findOwnedQuote(customerId, quoteId))
+                .thenReturn(quote(quoteId, NOW.plusSeconds(900), NOW.minusSeconds(1)));
+
+        assertThatThrownBy(() -> service.create(customerId, quoteId, key))
+                .isInstanceOfSatisfying(ResponseStatusException.class, exception ->
+                        assertThat(exception.getStatusCode()).isEqualTo(HttpStatus.CONFLICT));
+        verify(bookingRepository, never()).insertIfAbsent(
+                org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.anyString(),
+                org.mockito.ArgumentMatchers.anyString(), org.mockito.ArgumentMatchers.any(),
+                org.mockito.ArgumentMatchers.any());
+    }
+
+    @Test
     void rejectsAQuoteThatWonAConcurrentBookingRace() {
         UUID customerId = UUID.randomUUID();
         UUID quoteId = UUID.randomUUID();
@@ -198,6 +216,10 @@ class BookingServiceTest {
     }
 
     private static FareQuoteResponse quote(UUID quoteId, Instant expiresAt) {
+        return quote(quoteId, expiresAt, NOW.plusSeconds(86_400));
+    }
+
+    private static FareQuoteResponse quote(UUID quoteId, Instant expiresAt, Instant departureAt) {
         Instant created = NOW.minusSeconds(60);
         RateCardSnapshot card = new RateCardSnapshot(
                 UUID.randomUUID(), "TEST_PUNE_AIRPORT_SEDAN", 2, ServiceType.AIRPORT_TRANSFER,
@@ -206,7 +228,7 @@ class BookingServiceTest {
                 new BigDecimal("10"), BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO,
                 BigDecimal.ZERO, BigDecimal.ZERO, created, null, List.of());
         JourneyPreviewResponse journey = new JourneyPreviewResponse(
-                ServiceType.AIRPORT_TRANSFER, "PUNE", NOW.plusSeconds(86_400), List.of(), 10_000, 1_800,
+                ServiceType.AIRPORT_TRANSFER, "PUNE", departureAt, List.of(), 10_000, 1_800,
                 "route-polyline", "route-reference");
         FareCalculationResult fare = new FareCalculationResult(
                 "INR", new BigDecimal("10.000"), new BigDecimal("10.000"),
