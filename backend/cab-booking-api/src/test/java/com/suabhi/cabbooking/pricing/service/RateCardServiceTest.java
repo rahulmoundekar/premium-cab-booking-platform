@@ -7,7 +7,7 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
-import com.suabhi.cabbooking.fleet.repository.VehicleCategoryRepository;
+import com.suabhi.cabbooking.fleet.FleetCategoryCatalog;
 import com.suabhi.cabbooking.journey.provider.City;
 import com.suabhi.cabbooking.journey.provider.ServiceType;
 import com.suabhi.cabbooking.pricing.domain.PricingRateCard;
@@ -33,7 +33,7 @@ class RateCardServiceTest {
         rateCards = mock(PricingRateCardRepository.class);
         service = new RateCardService(
                 rateCards,
-                mock(VehicleCategoryRepository.class),
+                mock(FleetCategoryCatalog.class),
                 Clock.fixed(Instant.parse("2026-11-13T12:00:00Z"), ZoneOffset.UTC));
     }
 
