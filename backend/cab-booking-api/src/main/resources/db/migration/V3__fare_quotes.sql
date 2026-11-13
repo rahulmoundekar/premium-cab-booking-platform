@@ -9,6 +9,7 @@ CREATE TABLE fare_quotes (
   vehicle_category_id UUID NOT NULL REFERENCES vehicle_categories(id) ON DELETE RESTRICT,
   vehicle_category_code VARCHAR(60) NOT NULL,
   departure_at TIMESTAMPTZ NOT NULL,
+  rental_hours INTEGER,
   currency CHAR(3) NOT NULL,
   distance_meters BIGINT NOT NULL,
   duration_seconds BIGINT NOT NULL,
@@ -22,6 +23,10 @@ CREATE TABLE fare_quotes (
   CONSTRAINT ck_fare_quote_city CHECK (operating_city IN ('PUNE','MUMBAI')),
   CONSTRAINT ck_fare_quote_currency CHECK (currency ~ '^[A-Z]{3}$'),
   CONSTRAINT ck_fare_quote_route_metrics CHECK (distance_meters > 0 AND duration_seconds > 0),
+  CONSTRAINT ck_fare_quote_rental_hours CHECK (
+    (service_type = 'LOCAL_RENTAL' AND rental_hours > 0)
+    OR (service_type <> 'LOCAL_RENTAL' AND rental_hours IS NULL)
+  ),
   CONSTRAINT ck_fare_quote_total CHECK (total_amount >= 0),
   CONSTRAINT ck_fare_quote_expiry CHECK (expires_at > created_at)
 );
