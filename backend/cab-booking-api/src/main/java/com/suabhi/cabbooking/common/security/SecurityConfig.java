@@ -54,7 +54,10 @@ public class SecurityConfig {
 
         http.cors(cors -> cors.configurationSource(corsSource))
             .csrf(csrf -> csrf.csrfTokenRepository(csrfRepository)
-                    .csrfTokenRequestHandler(csrfRequestHandler))
+                    .csrfTokenRequestHandler(csrfRequestHandler)
+                    .accessDeniedHandler((request, response, exception) ->
+                            response.sendError(HttpServletResponse.SC_FORBIDDEN,
+                                    "Missing or invalid CSRF token")))
             .securityContext(context -> context.securityContextRepository(contextRepository)
                     .requireExplicitSave(true))
             .authenticationProvider(authenticationProvider)
