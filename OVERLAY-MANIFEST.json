@@ -3,7 +3,6 @@
   "purpose": "Current repository inventory; this file is not an overlay extraction manifest.",
   "generatedFromBranch": "feature/phase-1-foundation",
   "trackedFileCount": 508,
-  "trackedBytes": 50568435,
   "applications": {
     "backend": {
       "path": "backend/cab-booking-api",
@@ -50,5 +49,6 @@
     "live driver tracking",
     "email verification",
     "account recovery"
-  ]
+  ],
+  "note": "Tracked-file inventory at the time of this commit. Byte totals are intentionally omitted because source changes alter them."
 }
