@@ -26,14 +26,16 @@ import org.springframework.web.server.ResponseStatusException;
 
 class RateCardServiceTest {
     private PricingRateCardRepository rateCards;
+    private FleetCategoryCatalog fleetCategoryCatalog;
     private RateCardService service;
 
     @BeforeEach
     void setUp() {
         rateCards = mock(PricingRateCardRepository.class);
+        fleetCategoryCatalog = mock(FleetCategoryCatalog.class);
         service = new RateCardService(
                 rateCards,
-                mock(FleetCategoryCatalog.class),
+                fleetCategoryCatalog,
                 Clock.fixed(Instant.parse("2026-11-13T12:00:00Z"), ZoneOffset.UTC));
     }
 
@@ -76,6 +78,38 @@ class RateCardServiceTest {
                         assertThat(exception.getStatusCode()).isEqualTo(HttpStatus.CONFLICT));
 
         verify(rateCards, never()).setActive(id, true);
+    }
+
+    @Test
+    void findsActiveRateCardEffectiveAtScheduledDeparture() {
+        UUID categoryId = UUID.randomUUID();
+        Instant departure = Instant.parse("2026-11-14T05:00:00Z");
+        PricingRateCard card = rateCard(UUID.randomUUID(), true, null);
+        when(fleetCategoryCatalog.findActiveCategory("EXECUTIVE_SEDAN"))
+                .thenReturn(Optional.of(new FleetCategoryCatalog.CategoryReference(categoryId, "EXECUTIVE_SEDAN")));
+        when(rateCards.findEffectiveActive(ServiceType.AIRPORT_TRANSFER, City.PUNE, categoryId, departure))
+                .thenReturn(Optional.of(card));
+
+        PricingRateCard result = service.findEffectiveActive(
+                ServiceType.AIRPORT_TRANSFER, City.PUNE, " executive_sedan ", departure);
+
+        assertThat(result).isSameAs(card);
+        verify(rateCards).findEffectiveActive(ServiceType.AIRPORT_TRANSFER, City.PUNE, categoryId, departure);
+    }
+
+    @Test
+    void rejectsQuoteWhenNoEffectiveActiveRateCardExists() {
+        UUID categoryId = UUID.randomUUID();
+        Instant departure = Instant.parse("2026-11-14T05:00:00Z");
+        when(fleetCategoryCatalog.findActiveCategory("EXECUTIVE_SEDAN"))
+                .thenReturn(Optional.of(new FleetCategoryCatalog.CategoryReference(categoryId, "EXECUTIVE_SEDAN")));
+        when(rateCards.findEffectiveActive(ServiceType.AIRPORT_TRANSFER, City.PUNE, categoryId, departure))
+                .thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> service.findEffectiveActive(
+                ServiceType.AIRPORT_TRANSFER, City.PUNE, "EXECUTIVE_SEDAN", departure))
+                .isInstanceOfSatisfying(ResponseStatusException.class, exception ->
+                        assertThat(exception.getStatusCode()).isEqualTo(HttpStatus.UNPROCESSABLE_ENTITY));
     }
 
     private static PricingRateCard rateCard(UUID id, boolean active, Instant effectiveUntil) {
