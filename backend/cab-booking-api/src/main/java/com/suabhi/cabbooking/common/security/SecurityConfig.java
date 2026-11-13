@@ -66,6 +66,7 @@ public class SecurityConfig {
                     .requestMatchers(HttpMethod.GET, "/api/v1/auth/csrf").permitAll()
                     .requestMatchers(HttpMethod.POST, "/api/v1/auth/register", "/api/v1/auth/login").permitAll()
                     .requestMatchers("/api/v1/auth/me", "/api/v1/auth/logout").authenticated()
+                    .requestMatchers("/api/v1/admin/pricing/**").hasAnyRole("ADMIN", "SUPER_ADMIN")
                     .requestMatchers("/api/v1/customer/**").hasRole("CUSTOMER")
                     .anyRequest().authenticated())
             .exceptionHandling(exceptions -> exceptions
