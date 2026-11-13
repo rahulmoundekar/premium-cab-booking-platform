@@ -106,7 +106,7 @@ public class SecurityConfig {
         config.setAllowedOrigins(properties.allowedOrigins());
         config.setAllowedMethods(List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
         config.setAllowedHeaders(List.of(HttpHeaders.CONTENT_TYPE, HttpHeaders.ACCEPT,
-                "X-Requested-With", "X-XSRF-TOKEN"));
+                "X-Requested-With", "X-XSRF-TOKEN", "Idempotency-Key"));
         config.setExposedHeaders(List.of(HttpHeaders.LOCATION, HttpHeaders.CONTENT_DISPOSITION));
         config.setAllowCredentials(true);
         config.setMaxAge(3600L);
