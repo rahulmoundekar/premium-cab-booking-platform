@@ -249,3 +249,51 @@ The in-process rate limiter is per API instance; configure Google Cloud project 
 Mock HTTP tests cover Autocomplete mapping, Place Details resolution, Geocoding fallback, ordered route intermediates and server-calculated route metrics, and sanitized handling of provider authorization errors. These tests do not require a real API key or incur Google Maps usage charges.
 
 Live Google API verification remains a separate manual step after the operator supplies a valid restricted key.
+
+
+## Phase 3.2 — Configurable rate cards and pricing engine
+
+The pricing foundation is now implemented as a separate Spring Modulith module. It deliberately contains no sample commercial tariffs; the business must approve and configure the actual Pune and Mumbai prices.
+
+### Rate-card persistence
+
+Flyway migration `V2__pricing_rate_cards.sql` adds:
+
+- `pricing_rate_cards`: versioned rates scoped by service type, operating city and active vehicle category, with currency, base/minimum fare, kilometre/hour/day rates, included usage, driver allowance and effective dates.
+- `pricing_rate_card_components`: ordered fixed or percentage surcharges and tax components.
+- No rate-card rows are seeded.
+
+A rate card is created inactive. Administrators activate it explicitly. The service checks for overlapping active effective periods, and a PostgreSQL GiST exclusion constraint protects against concurrent activation races for the same service/city/category. Rate cards are versioned rather than edited in place; deactivate an existing version and create the next version for a pricing change.
+
+### Administrator API
+
+Only users with `ROLE_ADMIN` or `ROLE_SUPER_ADMIN` may use:
+
+| Method | Endpoint | Purpose |
+|---|---|---|
+| GET | `/api/v1/admin/pricing/rate-cards` | List configured rate cards and components |
+| POST | `/api/v1/admin/pricing/rate-cards` | Create an inactive version |
+| POST | `/api/v1/admin/pricing/rate-cards/{id}/activate` | Activate after effective-period overlap validation |
+| POST | `/api/v1/admin/pricing/rate-cards/{id}/deactivate` | Deactivate a version |
+
+The creation request requires the service, city, active vehicle category, ISO currency code, all rate values (use explicit zero for unused rates), effective dates and optional component list. New rate cards are inactive by default.
+
+### Deterministic pricing rules
+
+The pure `PricingEngine` accepts trusted server-side route distance/duration, plus a rental package duration for local rental. It rejects inactive cards and service/city mismatches.
+
+- Airport transfer: base fare plus billable kilometres beyond included kilometres.
+- Local rental: base fare plus billable kilometres and billable package hours beyond the included allowances. The selected package duration must be supplied; route duration is not treated as the rental package duration.
+- Outstation: base fare plus billable kilometres, ceiling-based billable days and driver allowance per day.
+- The minimum fare is applied to the core subtotal before surcharges and taxes.
+- Fixed and percentage surcharges are supported. Percentage surcharges apply to the core subtotal.
+- Taxes can be fixed or percentage-based. Percentage taxes apply to the core subtotal plus taxable surcharges; tax-on-tax is not applied.
+- All monetary arithmetic uses `BigDecimal` and rounds monetary line items to two decimal places using HALF_UP.
+
+### Important boundary
+
+This increment delivers rate-card administration and tested fare calculation rules. It does **not** yet expose a customer fare-quote endpoint or persist quote snapshots. That next quote slice must combine a trusted server-calculated route, a currently effective rate card, category capacity validation, authenticated customer ownership, quote expiry and an immutable price snapshot. Do not accept client-submitted distance, duration or fare values as authoritative inputs.
+
+### Verification
+
+The pricing unit tests cover airport minimum fare and surcharge/tax calculations, outstation ceiling-day and driver-allowance calculations, local-rental included-hour and kilometre handling, service/city mismatch rejection, inactive cards, and rate-card activation overlap/expiry rules. Run the complete API test suite and validate Flyway V2 against the local PostgreSQL 18 + PostGIS database before proceeding to quote persistence.
