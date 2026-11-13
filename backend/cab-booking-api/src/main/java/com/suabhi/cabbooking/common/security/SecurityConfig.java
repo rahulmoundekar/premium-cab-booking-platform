@@ -18,6 +18,7 @@ import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.context.HttpSessionSecurityContextRepository;
 import org.springframework.security.web.context.SecurityContextRepository;
 import org.springframework.security.web.csrf.CookieCsrfTokenRepository;
+import org.springframework.security.web.csrf.CsrfException;
 import org.springframework.security.web.csrf.CsrfTokenRequestAttributeHandler;
 import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.CorsConfigurationSource;
@@ -69,8 +70,15 @@ public class SecurityConfig {
                     .requestMatchers("/api/v1/customer/**").hasRole("CUSTOMER")
                     .anyRequest().authenticated())
             .exceptionHandling(exceptions -> exceptions
-                    .authenticationEntryPoint((request, response, exception) -> response.sendError(
-                            HttpServletResponse.SC_UNAUTHORIZED, "Authentication required"))
+                    .authenticationEntryPoint((request, response, exception) -> {
+                        if (hasCause(exception, CsrfException.class)) {
+                            response.sendError(HttpServletResponse.SC_FORBIDDEN,
+                                    "CSRF validation failed");
+                        } else {
+                            response.sendError(HttpServletResponse.SC_UNAUTHORIZED,
+                                    "Authentication required");
+                        }
+                    })
                     .accessDeniedHandler((request, response, exception) ->
                             response.sendError(HttpServletResponse.SC_FORBIDDEN,
                                     "Access denied")))
@@ -86,6 +94,15 @@ public class SecurityConfig {
                 }
             });
         return http.build();
+    }
+
+    private static boolean hasCause(Throwable exception, Class<? extends Throwable> type) {
+        for (Throwable cause = exception; cause != null; cause = cause.getCause()) {
+            if (type.isInstance(cause)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     @Bean
