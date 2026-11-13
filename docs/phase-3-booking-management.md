@@ -122,3 +122,70 @@ Use foreign keys, status/service-type check constraints, non-negative monetary a
 - Taxes, cancellation windows/fees, quote validity and confirmation policy.
 
 Until these are supplied, implement the pricing engine as configurable rules with test fixtures only; do not publish invented fares or promise a live quote.
+
+
+## Implemented first vertical slice — provider-neutral journey preview
+
+The first Phase 3 increment is implemented on `feature/phase-3-booking-management`.
+
+### Provider ports
+
+- `GeocodingProvider`: place search by query/city and resolution of a customer-supplied address/reference/optional coordinate pair into a normalized place.
+- `RouteProvider`: server-side route calculation from an ordered list of normalized places. The returned distance and duration are required to be positive.
+- `City` and `ServiceType` are application-owned enums. No Google, Mapbox, HERE or other vendor SDK types are exposed in the application contract.
+- Spring provides fallback implementations only when no real adapter bean exists. Those fallback implementations return HTTP 503 and never fabricate a location, distance or duration. A real adapter can be added as a Spring bean implementing the relevant interface.
+
+### Customer API
+
+Both endpoints require an authenticated customer session. Mutating requests also require the existing CSRF header.
+
+| Method | Endpoint | Purpose |
+|---|---|---|
+| GET | `/api/v1/customer/journeys/places?query={text}&city={PUNE%7CMUMBAI}` | Search place suggestions through the configured geocoding adapter |
+| POST | `/api/v1/customer/journeys/preview` | Resolve pickup/stops/drop-off and calculate a server-side route preview |
+
+Example preview request:
+
+```json
+{
+  "serviceType": "OUTSTATION",
+  "originCity": "PUNE",
+  "departureAt": "2027-01-15T08:30:00+05:30",
+  "pickup": {
+    "formattedAddress": "Shivajinagar, Pune, Maharashtra",
+    "providerReference": null,
+    "latitude": null,
+    "longitude": null
+  },
+  "stops": [],
+  "dropOff": {
+    "formattedAddress": "Mumbai Airport, Mumbai, Maharashtra",
+    "providerReference": null,
+    "latitude": null,
+    "longitude": null
+  }
+}
+```
+
+The departure time must be in the future. Pickup, drop-off and up to eight stops are accepted. Optional coordinates must be supplied as a valid latitude/longitude pair; geographic bounds are validated. The application calls the geocoder to normalize every place and then sends the ordered locations to the route adapter.
+
+### Current runtime behavior and boundaries
+
+- No provider API key or vendor has been selected. Until one or both adapter beans are configured, place search or preview returns HTTP 503 with a clear provider-not-configured error.
+- A journey preview is transient. It is not yet a persisted fare quote or booking.
+- There is no route distance, fare, service-zone eligibility or availability fabricated by this slice.
+- The implementation adds no database migration and does not change the Phase 1 schema.
+
+### Tests added
+
+- Journey preview resolves pickup, intermediate stops and drop-off in order before routing.
+- Route request preserves service type and origin city.
+- Place search trims surrounding whitespace.
+- Route results reject non-positive distance or duration.
+- Provider-adapter fallback behavior is tested to return HTTP 503.
+
+Run the full Maven verification suite before relying on the new API:
+
+```powershell
+docker run --rm -v "${PWD.Path}:/workspace" -w /workspace/backend/cab-booking-api maven:3.9.9-eclipse-temurin-21 mvn -B -ntp clean verify
+```
