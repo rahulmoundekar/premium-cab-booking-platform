@@ -78,6 +78,7 @@ class FareQuoteServiceTest {
         assertThat(response.id()).isNotNull();
         assertThat(response.createdAt()).isEqualTo(NOW);
         assertThat(response.expiresAt()).isEqualTo(NOW.plusSeconds(900));
+        assertThat(response.rentalHours()).isNull();
         assertThat(response.journey().distanceMeters()).isEqualTo(10_000);
         assertThat(response.journey().durationSeconds()).isEqualTo(1_800);
         assertThat(response.rateCard().id()).isEqualTo(rateCard.id());
@@ -86,6 +87,42 @@ class FareQuoteServiceTest {
         assertThat(response.fare().surchargeTotal()).isEqualByComparingTo("10.00");
         assertThat(response.fare().taxTotal()).isEqualByComparingTo("10.50");
 
+        verify(quoteRepository).save(customerId, rateCard, response);
+    }
+
+    @Test
+    void snapshotsTheSelectedLocalRentalPackageDuration() {
+        UUID customerId = UUID.randomUUID();
+        PricingRateCard rateCard = localRentalRateCard();
+        JourneyPreviewRequest journeyRequest = new JourneyPreviewRequest(
+                ServiceType.LOCAL_RENTAL,
+                City.PUNE,
+                OffsetDateTime.parse("2026-11-14T10:00:00+05:30"),
+                new JourneyPreviewRequest.PlaceRequest("Koregaon Park, Pune", "pickup-ref", null, null),
+                new JourneyPreviewRequest.PlaceRequest("Hinjawadi, Pune", "drop-ref", null, null),
+                List.of());
+        JourneyPreviewResponse route = new JourneyPreviewResponse(
+                ServiceType.LOCAL_RENTAL,
+                City.PUNE.name(),
+                journeyRequest.departureAt().toInstant(),
+                List.of(
+                        new JourneyPreviewResponse.Place("Koregaon Park, Pune", "pickup-ref", 18.5362, 73.8939),
+                        new JourneyPreviewResponse.Place("Hinjawadi, Pune", "drop-ref", 18.5913, 73.7389)),
+                10_000,
+                1_800,
+                null,
+                "server-route-reference");
+        when(journeyPreviewService.preview(journeyRequest)).thenReturn(route);
+        when(rateCardService.findEffectiveActive(
+                ServiceType.LOCAL_RENTAL, City.PUNE, "EXECUTIVE_SEDAN",
+                journeyRequest.departureAt().toInstant())).thenReturn(rateCard);
+
+        FareQuoteResponse response = service.create(
+                customerId, new FareQuoteRequest(journeyRequest, "EXECUTIVE_SEDAN", 12));
+
+        assertThat(response.rentalHours()).isEqualTo(12);
+        assertThat(response.fare().usageCharge()).isEqualByComparingTo("400.00");
+        assertThat(response.fare().totalAmount()).isEqualByComparingTo("700.00");
         verify(quoteRepository).save(customerId, rateCard, response);
     }
 
@@ -106,6 +143,30 @@ class FareQuoteServiceTest {
                 OffsetDateTime.parse("2026-11-14T10:00:00+05:30"),
                 new JourneyPreviewRequest.PlaceRequest("Pune Airport", "pickup-ref", null, null),
                 new JourneyPreviewRequest.PlaceRequest("Koregaon Park, Pune", "drop-ref", null, null),
+                List.of());
+    }
+
+    private static PricingRateCard localRentalRateCard() {
+        return new PricingRateCard(
+                UUID.randomUUID(),
+                "TEST_PUNE_LOCAL_SEDAN",
+                1,
+                ServiceType.LOCAL_RENTAL,
+                City.PUNE,
+                UUID.randomUUID(),
+                "EXECUTIVE_SEDAN",
+                "INR",
+                new BigDecimal("300.00"),
+                new BigDecimal("300.00"),
+                new BigDecimal("10.0000"),
+                new BigDecimal("100.0000"),
+                new BigDecimal("0.00"),
+                new BigDecimal("10.000"),
+                new BigDecimal("8.00"),
+                new BigDecimal("0.00"),
+                Instant.parse("2026-11-13T11:00:00Z"),
+                null,
+                true,
                 List.of());
     }
 
