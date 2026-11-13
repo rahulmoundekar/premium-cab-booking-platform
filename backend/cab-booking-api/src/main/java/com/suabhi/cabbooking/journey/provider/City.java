@@ -1,7 +1,7 @@
 package com.suabhi.cabbooking.journey.provider;
 
-@org.springframework.modulith.NamedInterface("types")
 /** Supported origin operating cities for the first rollout. */
+@org.springframework.modulith.NamedInterface("types")
 public enum City {
     PUNE,
     MUMBAI
