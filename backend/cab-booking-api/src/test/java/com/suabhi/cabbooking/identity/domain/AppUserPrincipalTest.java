@@ -14,8 +14,9 @@ class AppUserPrincipalTest {
                 "customer@example.com", "{bcrypt}hash", "Sample Customer",
                 "ACTIVE", false, Set.of("CUSTOMER"));
 
-        assertThat(principal.getAuthorities())
-                .containsExactly(new SimpleGrantedAuthority("ROLE_CUSTOMER"));
+        assertThat(principal.getAuthorities()).hasSize(1);
+        assertThat(principal.getAuthorities().iterator().next().getAuthority())
+                .isEqualTo("ROLE_CUSTOMER");
         assertThat(principal.isEnabled()).isTrue();
         assertThat(principal.getPassword()).isEqualTo("{bcrypt}hash");
         assertThat(principal.isEmailVerified()).isFalse();
