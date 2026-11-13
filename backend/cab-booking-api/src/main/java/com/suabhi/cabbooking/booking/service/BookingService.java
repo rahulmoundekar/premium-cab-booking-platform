@@ -63,6 +63,10 @@ public class BookingService {
             throw new ResponseStatusException(HttpStatus.CONFLICT,
                     "The fare quote has expired. Create a new quote before booking.");
         }
+        if (quote.journey().departureAt() == null || !now.isBefore(quote.journey().departureAt())) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT,
+                    "The scheduled departure is no longer in the future.");
+        }
 
         UUID bookingId = UUID.randomUUID();
         String bookingReference = "SB-" + REFERENCE_DATE.format(now) + "-"
@@ -126,7 +130,7 @@ public class BookingService {
 
     private BookingCreationResult replayOrReject(BookingResponse existing, String requestHash) {
         String storedHash = bookingRepository.findRequestHash(existing.id());
-        if (!MessageDigest.isEqual(
+        if (storedHash == null || !MessageDigest.isEqual(
                 storedHash.getBytes(StandardCharsets.US_ASCII),
                 requestHash.getBytes(StandardCharsets.US_ASCII))) {
             throw new ResponseStatusException(HttpStatus.CONFLICT,
