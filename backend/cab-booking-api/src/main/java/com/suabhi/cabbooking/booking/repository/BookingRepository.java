@@ -53,6 +53,12 @@ public class BookingRepository {
                 """, customerId, idempotencyKey);
     }
 
+    public String findRequestHash(UUID bookingId) {
+        return jdbcTemplate.queryForObject(
+                "SELECT request_hash FROM bookings WHERE id = ?",
+                String.class, bookingId);
+    }
+
     public Optional<BookingResponse> findByQuoteId(UUID quoteId) {
         return findOne("""
                 SELECT booking_snapshot::text
