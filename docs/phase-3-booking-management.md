@@ -368,7 +368,7 @@ The customer identity always comes from the authenticated session. A quote ID is
 
 ### Transactional guarantees
 
-- A quote must exist for the authenticated customer and its 15-minute validity window must not have expired.
+- A quote must exist for the authenticated customer, its 15-minute validity window must not have expired, and its scheduled departure must still be in the future.
 - A quote can be converted into at most one booking; the database enforces uniqueness on `quote_id`.
 - A customer's `Idempotency-Key` is unique. A retry with the same key and same quote returns the original booking. Reusing the key with a different quote returns HTTP 409.
 - Concurrent create attempts are arbitrated by the unique customer/idempotency and quote constraints. A losing request returns the committed booking for an identical replay or HTTP 409 for a conflicting use.
