@@ -15,6 +15,7 @@ import java.util.UUID;
  * Immutable quote view. Journey, tariff and calculation data are snapshots and do not
  * change when the catalogue or a rate card is subsequently modified.
  */
+@org.springframework.modulith.NamedInterface("quotes")
 public record FareQuoteResponse(
         UUID id,
         Instant createdAt,
