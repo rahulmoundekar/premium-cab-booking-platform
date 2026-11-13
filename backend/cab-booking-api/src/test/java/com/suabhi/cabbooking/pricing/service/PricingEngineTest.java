@@ -71,7 +71,7 @@ class PricingEngineTest {
                 "500.00", "0.00", "10.00", "200.00", "0", "20.000", "4.00", "0", List.of());
 
         FareCalculationResult result = engine.calculate(card,
-                new FareCalculationInput(ServiceType.LOCAL_RENTAL, City.MUMBAI, 45_000, 7_200, 8));
+                new FareCalculationInput(ServiceType.LOCAL_RENTAL, City.PUNE, 45_000, 7_200, 8));
 
         assertThat(result.billableKilometers()).isEqualByComparingTo("25.000");
         assertThat(result.distanceCharge()).isEqualByComparingTo("250.00");
