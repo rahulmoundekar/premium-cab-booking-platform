@@ -76,6 +76,7 @@ public class FareQuoteService {
                 UUID.randomUUID(),
                 createdAt,
                 createdAt.plus(QUOTE_VALIDITY),
+                request.rentalHours(),
                 journey,
                 FareQuoteResponse.RateCardSnapshot.from(rateCard),
                 fare);
