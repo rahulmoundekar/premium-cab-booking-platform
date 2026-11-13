@@ -14,6 +14,7 @@ import jakarta.validation.constraints.Size;
 import java.time.OffsetDateTime;
 import java.util.List;
 
+@org.springframework.modulith.NamedInterface("preview")
 public record JourneyPreviewRequest(
         @NotNull ServiceType serviceType,
         @NotNull City originCity,
