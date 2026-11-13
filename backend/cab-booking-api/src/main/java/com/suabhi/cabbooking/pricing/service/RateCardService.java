@@ -107,7 +107,14 @@ public class RateCardService {
             throw new ResponseStatusException(HttpStatus.CONFLICT,
                     "Another active rate card overlaps this service, city, vehicle category and effective period.");
         }
-        rateCardRepository.setActive(id, true);
+        try {
+            rateCardRepository.setActive(id, true);
+        } catch (DataIntegrityViolationException exception) {
+            // The database exclusion constraint is the final guard against concurrent activation races.
+            throw new ResponseStatusException(HttpStatus.CONFLICT,
+                    "Another active rate card overlaps this service, city, vehicle category and effective period.",
+                    exception);
+        }
         return rateCardRepository.findById(id).orElseThrow();
     }
 
