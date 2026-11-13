@@ -2,12 +2,7 @@ package com.suabhi.cabbooking.common.security;
 
 import com.suabhi.cabbooking.common.config.CorsProperties;
 import com.suabhi.cabbooking.common.config.SecurityProperties;
-import jakarta.servlet.http.Cookie;
-import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
-import java.nio.charset.StandardCharsets;
-import java.security.MessageDigest;
-import java.util.Arrays;
 import java.util.List;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
@@ -74,18 +69,12 @@ public class SecurityConfig {
                     .requestMatchers("/api/v1/customer/**").hasRole("CUSTOMER")
                     .anyRequest().authenticated())
             .exceptionHandling(exceptions -> exceptions
-                    .authenticationEntryPoint((request, response, exception) -> {
-                        if (isUnsafeMethod(request) && !hasMatchingCsrfCookieAndHeader(request)) {
-                            response.sendError(HttpServletResponse.SC_FORBIDDEN,
-                                    "CSRF validation failed");
-                        } else {
-                            response.sendError(HttpServletResponse.SC_UNAUTHORIZED,
-                                    "Authentication required");
-                        }
-                    })
+                    .authenticationEntryPoint((request, response, exception) ->
+                            writeError(response, HttpServletResponse.SC_UNAUTHORIZED,
+                                    "Unauthorized", "Authentication required"))
                     .accessDeniedHandler((request, response, exception) ->
-                            response.sendError(HttpServletResponse.SC_FORBIDDEN,
-                                    "Access denied")))
+                            writeError(response, HttpServletResponse.SC_FORBIDDEN,
+                                    "Forbidden", "Access denied")))
             .headers(headers -> {
                 headers.frameOptions(frame -> frame.deny());
                 headers.contentTypeOptions(Customizer.withDefaults());
@@ -100,26 +89,14 @@ public class SecurityConfig {
         return http.build();
     }
 
-    private static boolean isUnsafeMethod(HttpServletRequest request) {
-        String method = request.getMethod();
-        return !("GET".equals(method) || "HEAD".equals(method)
-                || "TRACE".equals(method) || "OPTIONS".equals(method));
-    }
-
-    private static boolean hasMatchingCsrfCookieAndHeader(HttpServletRequest request) {
-        String headerToken = request.getHeader("X-XSRF-TOKEN");
-        if (headerToken == null || headerToken.isBlank() || request.getCookies() == null) {
-            return false;
-        }
-
-        return Arrays.stream(request.getCookies())
-                .filter(cookie -> "SUABHI-XSRF-TOKEN".equals(cookie.getName()))
-                .findFirst()
-                .map(Cookie::getValue)
-                .filter(cookieToken -> MessageDigest.isEqual(
-                        cookieToken.getBytes(StandardCharsets.UTF_8),
-                        headerToken.getBytes(StandardCharsets.UTF_8)))
-                .isPresent();
+    private static void writeError(HttpServletResponse response, int status,
+                                   String error, String message) throws java.io.IOException {
+        response.setStatus(status);
+        response.setCharacterEncoding(java.nio.charset.StandardCharsets.UTF_8.name());
+        response.setContentType("application/json");
+        response.getWriter().write("{\"status\":" + status
+                + ",\"error\":\"" + error
+                + "\",\"message\":\"" + message + "\"}");
     }
 
     @Bean
