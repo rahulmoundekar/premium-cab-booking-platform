@@ -1,8 +1,11 @@
+ALTER TABLE fare_quotes
+  ADD CONSTRAINT ux_fare_quotes_id_customer UNIQUE (id, customer_id);
+
 CREATE TABLE bookings (
   id UUID PRIMARY KEY,
   booking_reference VARCHAR(40) NOT NULL UNIQUE,
   customer_id UUID NOT NULL REFERENCES app_users(id) ON DELETE RESTRICT,
-  quote_id UUID NOT NULL UNIQUE REFERENCES fare_quotes(id) ON DELETE RESTRICT,
+  quote_id UUID NOT NULL UNIQUE,
   idempotency_key VARCHAR(160) NOT NULL,
   request_hash VARCHAR(128) NOT NULL,
   status VARCHAR(32) NOT NULL DEFAULT 'PENDING_CONFIRMATION',
@@ -12,11 +15,13 @@ CREATE TABLE bookings (
   departure_at TIMESTAMPTZ NOT NULL,
   currency CHAR(3) NOT NULL,
   total_amount NUMERIC(14,2) NOT NULL,
-  quote_snapshot JSONB NOT NULL,
+  booking_snapshot JSONB NOT NULL,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   cancelled_at TIMESTAMPTZ,
   CONSTRAINT ux_bookings_customer_idempotency UNIQUE (customer_id, idempotency_key),
+  CONSTRAINT fk_bookings_quote_owner FOREIGN KEY (quote_id, customer_id)
+    REFERENCES fare_quotes(id, customer_id) ON DELETE RESTRICT,
   CONSTRAINT ck_bookings_status CHECK (
     status IN ('PENDING_CONFIRMATION','CONFIRMED','REJECTED','CANCELLED',
                'ASSIGNED','IN_PROGRESS','COMPLETED')
@@ -66,6 +71,6 @@ CREATE INDEX ix_booking_events_booking_time
   ON booking_events(booking_id, occurred_at, id);
 
 COMMENT ON TABLE bookings IS
-  'Customer bookings created only from owned, unexpired fare quotes. Quote snapshot is immutable.';
+  'Customer bookings created only from owned, unexpired fare quotes. Booking snapshot is immutable.';
 COMMENT ON TABLE booking_events IS
   'Append-only booking lifecycle events written in the same transaction as each state change.';
