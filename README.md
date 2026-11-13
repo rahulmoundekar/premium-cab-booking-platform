@@ -26,8 +26,12 @@ Standalone premium cab-booking platform for Pune and Mumbai. This repository has
 | GET/PATCH | `/api/v1/customer/profile` | Read/update customer profile |
 | POST | `/api/v1/customer/quotes` | Create an expiring fare quote from a server-calculated route and effective rate card |
 | GET | `/api/v1/customer/quotes/{quoteId}` | Read an owned fare quote snapshot |
+| POST | `/api/v1/customer/bookings` | Create a booking from an owned, unexpired quote (requires `Idempotency-Key`) |
+| GET | `/api/v1/customer/bookings` | List the signed-in customer's bookings |
+| GET | `/api/v1/customer/bookings/{bookingId}` | Read one owned booking |
+| POST | `/api/v1/customer/bookings/{bookingId}/cancel` | Cancel a booking still pending confirmation |
 
-Booking creation/lifecycle, payments, driver assignment and live tracking are not implemented yet. Customer fare-quote persistence and calculation are implemented behind the journey provider; live route-based quotes return HTTP 503 until a real route/geocoding provider is configured. Account recovery and email verification are also pending.
+Payment collection, driver assignment, dispatch and live tracking are not implemented yet. Booking creation from an owned, unexpired quote, idempotent retries, customer booking history and cancellation while pending confirmation are implemented; new bookings remain `PENDING_CONFIRMATION` until a later availability/dispatch workflow confirms them. Customer fare-quote persistence and calculation are implemented behind the journey provider; live route-based quotes return HTTP 503 until a real route/geocoding provider is configured. Account recovery and email verification are also pending.
 
 ### Authentication and security baseline
 
