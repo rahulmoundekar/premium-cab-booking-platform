@@ -1,22 +1,44 @@
 # Suabhi Cab Booking
 
-Standalone premium cab booking platform for Pune and Mumbai. This repository is independent of all other products.
+Standalone premium cab-booking platform for Pune and Mumbai. This repository has its own application, database, identity store, fleet catalogue and deployment boundary.
 
-## Frontend templates
+## Current implementation
 
-- **Customer:** uploaded Rentaly dark vehicle-rental template is the primary customer design. The original CSS/JS/fonts/images and page templates are retained under `frontend/apps/customer-web/public/rentaly`; the Next.js app serves it from `/rentaly/`.
-- **Admin:** uploaded React Material Admin is the primary operations UI foundation. It keeps its React/Vite/MUI/React Router stack, and the template sidebar/routes have been changed to Suabhi bookings, dispatch, fleet, drivers, customers, pricing, payments, corporate, service areas and reporting modules.
-- **Driver:** separate Next.js PWA foundation.
+- **Backend:** Java 21, Spring Boot 4.x, Spring Modulith, Spring Security, PostgreSQL 18/PostGIS, Redis and Flyway.
+- **Customer website:** original Suabhi Next.js interface with live public fleet catalogue, registration, login, profile management and logout. The copied Rentaly / Designesia demo pages, assets, fonts and vendor scripts are not included in the current customer app.
+- **Admin console:** React 19, Vite and Material UI, based on the supplied React Material Admin template. The template's MIT license notice is retained at `frontend/apps/admin-web/LICENSE.txt`.
+- **Driver app:** separate Next.js PWA starter. Driver workflows are not implemented yet.
+- **Infrastructure:** Docker Compose for local development; Jenkinsfile for CI/CD. GitHub Actions are intentionally not used.
 
-The UI templates are not yet connected to real booking/payment/driver operations. The admin's demo login (`admin@suabhi.local` / `local-preview-only`) is bundled into the frontend and is for local loopback preview only; it is not a security boundary.
+## Current capabilities
 
-## Apply the supplied template package
+### Backend APIs
 
-Clone `feature/phase-1-foundation`, download `suabhi-cab-booking-template-docker-overlay.zip`, copy it into the repository root and run `Expand-Archive -Path .\suabhi-cab-booking-template-docker-overlay.zip -DestinationPath . -Force` in PowerShell. The ZIP contains all provided template assets and Docker configuration. After extracting it, run `git add -A`, commit the template integration, and push `feature/phase-1-foundation` to store the assets in GitHub.
+| Method | Endpoint | Purpose |
+|---|---|---|
+| GET | `/api/v1/public/fleet/categories` | List active vehicle categories |
+| GET | `/api/v1/public/fleet/categories/{categoryCode}/models` | List models for a category |
+| GET | `/api/v1/auth/csrf` | Obtain CSRF token |
+| POST | `/api/v1/auth/register` | Register a customer |
+| POST | `/api/v1/auth/login` | Sign in using a server-side session |
+| GET | `/api/v1/auth/me` | Read signed-in identity |
+| POST | `/api/v1/auth/logout` | End the session |
+| GET/PATCH | `/api/v1/customer/profile` | Read/update customer profile |
 
-## Run full stack using Docker Desktop (Windows)
+Booking, fare calculation, payments, driver assignment, live tracking, account recovery and email verification are not implemented yet.
 
-See [`docs/deployment/local-docker-windows.md`](docs/deployment/local-docker-windows.md). Quick start:
+### Authentication and security baseline
+
+- BCrypt password hashing and server-side HTTP sessions.
+- Session ID rotation after successful login.
+- CSRF protection for unsafe HTTP methods.
+- Customer routes require the CUSTOMER role.
+- Local cookie flags are configured for HTTP development. Production deployment must use HTTPS, Secure cookies, HSTS, exact CORS origins and managed secrets.
+- The admin preview login is demo-only, bundled into the frontend, and is not an authentication boundary. Keep the admin service bound to loopback until real backend authentication and authorization are implemented.
+
+## Local Docker setup (Windows)
+
+See [Local Docker on Windows](docs/deployment/local-docker-windows.md).
 
 ```powershell
 Copy-Item .env.example .env
@@ -26,25 +48,23 @@ docker compose --env-file .env up -d --build
 docker compose ps
 ```
 
-### Isolated local ports
+### Local service URLs and ports
 
-| Service | Host port |
+| Service | URL / host port |
 |---|---:|
+| Customer website | http://localhost:53000 |
+| Admin console | http://localhost:53001 |
+| Driver PWA | http://localhost:53002 |
+| Spring Boot API | http://localhost:58080 |
 | PostgreSQL/PostGIS | 55432 |
 | Redis | 56379 |
-| Spring Boot API | 58080 |
-| Customer website | 53000 |
-| Admin console | 53001 |
-| Driver PWA | 53002 |
 
-## Stack
+All host ports are bound to loopback by Docker Compose. Do not expose the local demo configuration to a network.
 
-- Java 21, Spring Boot 4.x, Spring Modulith modular monolith
-- PostgreSQL 18 + PostGIS, Redis
-- Customer Next.js, admin React 19 + Vite + Material UI, driver Next.js
-- Three.js / React Three Fiber in the upcoming interactive fleet preview milestone
-- Docker Compose and Jenkins; no GitHub Actions pipeline
+## Architecture direction
 
-## License notices
+Start as a modular monolith. PostgreSQL is the system of record; PostGIS stores location and service-boundary data; Redis is for caching/coordination, not the authoritative booking ledger. Booking confirmation will need transactional, database-enforced schedule-conflict prevention. See [Phase 1 architecture](docs/architecture/phase-1-foundation.md) and [Phase 2 identity](docs/phase-2-identity.md).
 
-The React Material Admin source is distributed with its MIT license notice; that notice is retained in `frontend/apps/admin-web/LICENSE.txt`. The supplied Rentaly customer template did not include a clear license file in the upload. Verify your commercial/production-use rights with the template provider before publishing or redistributing those customer-theme assets.
+## Licensing
+
+The React Material Admin source is accompanied by its MIT license notice, retained in the admin application. The customer-facing app currently contains original Suabhi interface code rather than copied Rentaly / Designesia assets. Verify licensing for any third-party assets added in future changes before redistribution or commercial deployment.
