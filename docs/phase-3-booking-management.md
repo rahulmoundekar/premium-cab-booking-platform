@@ -189,3 +189,63 @@ Run the full Maven verification suite before relying on the new API:
 ```powershell
 docker run --rm -v "${PWD.Path}:/workspace" -w /workspace/backend/cab-booking-api maven:3.9.9-eclipse-temurin-21 mvn -B -ntp clean verify
 ```
+
+
+## Google Maps provider adapter — implementation
+
+The first concrete adapter implements the existing provider-neutral `GeocodingProvider` and `RouteProvider` ports. It is enabled only when `GOOGLE_MAPS_ENABLED=true`; otherwise the existing explicit HTTP 503 fallback remains active.
+
+### Google services used
+
+- Places API (New) Autocomplete returns place ID and display text, biased around the selected operating city (Pune or Mumbai) and restricted to India.
+- Places API (New) Place Details resolves a selected place ID to a formatted address and coordinates.
+- Geocoding API resolves manually entered addresses or reverse-geocodes a supplied coordinate pair when no place ID is present.
+- Routes API Compute Routes calculates driving distance, duration and encoded polyline on the server. Pickup, intermediate stops and drop-off are sent in their original order.
+
+Autocomplete suggestions intentionally return null coordinates. The browser should retain the selected `providerReference` (Google place ID), then submit that reference in the journey preview request. The server resolves it through Place Details before routing. This avoids making a separate Details call for every suggestion.
+
+The current provider-neutral search contract does not carry a Places session token. Autocomplete calls are therefore independent requests for billing purposes. Before high-volume public launch, add a provider-neutral autocomplete session context and pass one session token through the suggestion and selection-resolution flow. Debounce customer keystrokes and enforce Google Cloud quotas/budget alerts in the meantime.
+
+### Local configuration
+
+1. In Google Cloud, create/select a project and enable **Places API (New)**, **Geocoding API**, and **Routes API**.
+2. Enable billing and create a server-side API key.
+3. Restrict the key to the three required APIs and, outside local development, to the API server's egress IP addresses. Do not use this key in browser JavaScript.
+4. Put the key only in the local, untracked `.env` file:
+
+```dotenv
+GOOGLE_MAPS_ENABLED=true
+GOOGLE_MAPS_API_KEY=replace_with_your_server_key
+GOOGLE_MAPS_CONNECT_TIMEOUT=3s
+GOOGLE_MAPS_READ_TIMEOUT=8s
+GOOGLE_MAPS_REQUESTS_PER_SECOND=8
+GOOGLE_MAPS_MAX_SUGGESTIONS=5
+```
+
+5. Rebuild and recreate only the API service:
+
+```powershell
+docker compose --env-file .env build cab-booking-api
+docker compose --env-file .env up -d --force-recreate cab-booking-api
+docker compose ps cab-booking-api
+curl.exe http://localhost:58080/actuator/health
+```
+
+When `GOOGLE_MAPS_ENABLED=true` but the key is missing, the API fails fast at startup rather than silently using the fallback. When the flag is false or omitted, no Google network calls are made and the 503 fallback remains active.
+
+### Resilience and security
+
+- API key is sent in the `X-Goog-Api-Key` header for Places and Routes; the Geocoding API key is passed as a query parameter as required by that endpoint. Provider errors are translated to sanitized application errors so responses do not expose the key.
+- HTTP connect/read timeouts are configurable.
+- Requests are rate-limited per API process (default 8 request starts per second, configurable up to 100).
+- One bounded retry is made for network failures and transient 5xx responses. Client errors and quota/rate-limit responses are not retried.
+- Google response field masks request only the fields required by this journey flow.
+- API key material must never be committed, returned in API responses, or written to application logs.
+
+The in-process rate limiter is per API instance; configure Google Cloud project quotas as the authoritative limit across multiple replicas.
+
+### Adapter tests
+
+Mock HTTP tests cover Autocomplete mapping, Place Details resolution, Geocoding fallback, ordered route intermediates and server-calculated route metrics, and sanitized handling of provider authorization errors. These tests do not require a real API key or incur Google Maps usage charges.
+
+Live Google API verification remains a separate manual step after the operator supplies a valid restricted key.
