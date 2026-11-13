@@ -38,8 +38,8 @@ public final class GoogleMapsProvider implements GeocodingProvider, RouteProvide
             "https://routes.googleapis.com/directions/v2:computeRoutes";
     private static final String AUTOCOMPLETE_FIELD_MASK =
             "suggestions.placePrediction.placeId,"
-                    + "suggestions.placePrediction.text,"
-                    + "suggestions.placePrediction.structuredFormat.mainText";
+                    + "suggestions.placePrediction.text.text,"
+                    + "suggestions.placePrediction.structuredFormat.mainText.text";
     private static final String PLACE_DETAILS_FIELD_MASK = "id,formattedAddress,location";
     private static final String ROUTE_FIELD_MASK =
             "routes.distanceMeters,routes.duration,routes.polyline.encodedPolyline";
