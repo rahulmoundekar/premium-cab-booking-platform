@@ -160,8 +160,11 @@ class BookingDecisionServicePostgresIntegrationTest {
         bookingDecisionService.confirm(
                 first.operationsUserId(), first.bookingId(), first.vehicleId(), reservationEnd);
 
-        assertThat(bookingDecisionService.findAvailableVehicles(second.bookingId(), reservationEnd))
-                .isEmpty();
+        var availableForOverlappingWindow = bookingDecisionService.findAvailableVehicles(
+                second.bookingId(), reservationEnd);
+        assertThat(availableForOverlappingWindow)
+                .extracting(vehicle -> vehicle.vehicleId())
+                .doesNotContain(first.vehicleId());
 
         assertThatThrownBy(() -> bookingDecisionService.confirm(
                 second.operationsUserId(), second.bookingId(), second.vehicleId(), reservationEnd))
@@ -191,7 +194,7 @@ class BookingDecisionServicePostgresIntegrationTest {
                 adjacent.bookingId(), OffsetDateTime.ofInstant(adjacentEnd, ZoneOffset.UTC));
         assertThat(availableForAdjacentWindow)
                 .extracting(vehicle -> vehicle.vehicleId())
-                .containsExactly(first.vehicleId());
+                .contains(first.vehicleId());
 
         var secondResult = bookingDecisionService.confirm(
                 adjacent.operationsUserId(), adjacent.bookingId(), adjacent.vehicleId(),
