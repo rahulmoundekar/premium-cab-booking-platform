@@ -9,17 +9,20 @@ import com.suabhi.cabbooking.fleet.repository.VehicleModelRepository;
 import java.util.List;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.springframework.jdbc.core.JdbcTemplate;
 
 class FleetCatalogServiceTest {
     private VehicleCategoryRepository categories;
     private VehicleModelRepository models;
+    private JdbcTemplate jdbcTemplate;
     private FleetCatalogService service;
 
     @BeforeEach
     void setUp() {
         categories = mock(VehicleCategoryRepository.class);
         models = mock(VehicleModelRepository.class);
-        service = new FleetCatalogService(categories, models);
+        jdbcTemplate = mock(JdbcTemplate.class);
+        service = new FleetCatalogService(categories, models, jdbcTemplate);
     }
 
     @Test
