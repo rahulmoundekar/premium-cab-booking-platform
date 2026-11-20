@@ -280,7 +280,7 @@ class BookingDecisionServicePostgresIntegrationTest {
 
 
     @Test
-    void cancelsPendingBookingOnceAndPersistsEventAuditAndOutbox() {
+    void cancelsPendingBookingOnceAndPersistsEventAuditAndOutbox() throws Exception {
         Fixture fixture = createFixture();
 
         BookingResponse firstResult = bookingService.cancel(fixture.customerId(), fixture.bookingId());
@@ -315,7 +315,7 @@ class BookingDecisionServicePostgresIntegrationTest {
     }
 
     @Test
-    void customerCancellationCannotOverwriteAnOperationsDecisionAndCancelledBookingCannotBeConfirmed() {
+    void customerCancellationCannotOverwriteAnOperationsDecisionAndCancelledBookingCannotBeConfirmed() throws Exception {
         Fixture confirmed = createFixture();
         Instant confirmedUntil = confirmed.departureAt().plusSeconds(7_200);
         bookingDecisionService.confirm(
@@ -355,7 +355,7 @@ class BookingDecisionServicePostgresIntegrationTest {
     }
 
     @Test
-    void rollsBackCancellationStatusAndLifecycleRecordsWhenAuditWriteFails() {
+    void rollsBackCancellationStatusAndLifecycleRecordsWhenAuditWriteFails() throws Exception {
         Fixture fixture = createFixture();
 
         jdbcTemplate.execute("""
