@@ -530,3 +530,41 @@ The same Maven goals can also be run directly from the host/IDE when Java 21, Ma
 Review the Maven Surefire report for `BookingDecisionServicePostgresIntegrationTest`. Confirm that the class ran and was not skipped before marking Phase 3.6 verified.
 
 This suite does not enable Google Maps, configure commercial tariffs, or create operational records. It is a test-only database fixture and does not demonstrate a live customer journey or production fleet assignment.
+
+## Phase 3.7 — Customer cancellation lifecycle hardening
+
+Phase 3.7 extends the PostgreSQL-backed lifecycle suite without changing the customer cancellation policy or adding unsupported commercial rules.
+
+### Lifecycle policy retained
+
+- Customers can cancel only a booking in `PENDING_CONFIRMATION`.
+- Repeating cancellation for a booking already in `CANCELLED` returns the existing cancellation result and does not create another event.
+- Customers cannot cancel `CONFIRMED` or `REJECTED` bookings.
+- Operations cannot confirm a booking after customer cancellation.
+- No cancellation fee, cancellation window, refund, driver release or confirmed-ride cancellation behavior is introduced in this increment.
+
+### PostgreSQL-backed verification
+
+Three additional scenarios are included in `BookingDecisionServicePostgresIntegrationTest`:
+
+- Cancelling a pending booking persists the booking table and JSON snapshot status, cancellation timestamp, customer actor in the event, audit record and outbox record. Repeating cancellation preserves the original timestamp and does not duplicate side effects.
+- Customer cancellation cannot overwrite confirmed or rejected operations decisions, and an already-cancelled booking cannot be confirmed or allocated.
+- An injected audit-write failure rolls back the cancellation timestamp, booking status/snapshot, event and outbox write in the same database transaction.
+
+These scenarios use generated fixtures in the disposable Testcontainers PostgreSQL/PostGIS database. They do not create or modify records in the local Compose database.
+
+### Verification
+
+Run the integration suite with Docker Desktop access:
+
+```powershell
+docker run --rm `
+  -v "$($PWD.Path):/workspace" `
+  -v /var/run/docker.sock:/var/run/docker.sock `
+  -w /workspace/backend/cab-booking-api `
+  -e TESTCONTAINERS_HOST_OVERRIDE=host.docker.internal `
+  maven:3.9.9-eclipse-temurin-21 `
+  mvn -B -ntp -Dtest=BookingDecisionServicePostgresIntegrationTest test
+```
+
+The suite now contains nine PostgreSQL integration tests. Run `mvn -B -ntp clean verify` after the targeted suite passes. A Testcontainers class skipped because Docker is unavailable must be run separately with Docker connectivity before this lifecycle slice is marked verified.
