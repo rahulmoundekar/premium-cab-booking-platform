@@ -36,7 +36,7 @@ import org.testcontainers.utility.DockerImageName;
 import tools.jackson.databind.ObjectMapper;
 
 /**
- * PostgreSQL-backed integration tests for the Phase 3.5 booking decision workflow.
+ * PostgreSQL-backed integration tests for the Phase 3.6 booking decision workflow.
  *
  * <p>The container runs the same PostGIS major/image family as local development.
  * Flyway applies the production V1-V5 migrations to this disposable database.
@@ -268,7 +268,7 @@ class BookingDecisionServicePostgresIntegrationTest {
                 """, vehicleId, vehicleNumber, SEDAN_CATEGORY_ID, DZIRE_MODEL_ID);
 
         Fixture base = new Fixture(customerId, operationsUserId, rateCardId, rateCardCode,
-                vehicleId, vehicleNumber, null, null, null);
+                effectiveFrom, vehicleId, vehicleNumber, null, null, null);
         return createBookingForVehicle(base, Instant.now().plus(1, ChronoUnit.DAYS));
     }
 
@@ -301,7 +301,7 @@ class BookingDecisionServicePostgresIntegrationTest {
                 City.PUNE, SEDAN_CATEGORY_ID, "EXECUTIVE_SEDAN", "INR",
                 new BigDecimal("100"), new BigDecimal("150"), new BigDecimal("10"),
                 BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO,
-                BigDecimal.ZERO, createdAt, null, List.of());
+                BigDecimal.ZERO, base.rateCardEffectiveFrom(), null, List.of());
         JourneyPreviewResponse journey = new JourneyPreviewResponse(
                 ServiceType.AIRPORT_TRANSFER, "PUNE", normalizedDeparture, List.of(),
                 10_000, 1_800, "it-route-polyline", "it-route-reference");
@@ -332,7 +332,7 @@ class BookingDecisionServicePostgresIntegrationTest {
                 Timestamp.from(normalizedDeparture), objectMapper.writeValueAsString(booking));
 
         return new Fixture(base.customerId(), base.operationsUserId(), base.rateCardId(),
-                base.rateCardCode(), base.vehicleId(), base.vehicleNumber(),
+                base.rateCardCode(), base.rateCardEffectiveFrom(), base.vehicleId(), base.vehicleNumber(),
                 bookingId, quoteId, normalizedDeparture);
     }
 
@@ -370,6 +370,7 @@ class BookingDecisionServicePostgresIntegrationTest {
             UUID operationsUserId,
             UUID rateCardId,
             String rateCardCode,
+            Instant rateCardEffectiveFrom,
             UUID vehicleId,
             String vehicleNumber,
             UUID bookingId,
