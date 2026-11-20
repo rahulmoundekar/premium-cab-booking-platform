@@ -507,17 +507,25 @@ The existing `BookingDecisionServiceTest` remains the fast mocked unit-test laye
 
 ### Run and verify
 
-Run the complete API verification from `backend/cab-booking-api` in an environment where the Maven/JUnit process can reach Docker:
+From the repository root in PowerShell, run the Maven container with access to Docker Desktop's daemon socket. The Docker socket mount and host override allow Testcontainers to create its isolated sibling PostGIS container:
 
 ```powershell
-mvn -B -ntp clean verify
+docker run --rm `
+  -v "$($PWD.Path):/workspace" `
+  -v /var/run/docker.sock:/var/run/docker.sock `
+  -w /workspace/backend/cab-booking-api `
+  -e TESTCONTAINERS_HOST_OVERRIDE=host.docker.internal `
+  maven:3.9.9-eclipse-temurin-21 `
+  mvn -B -ntp clean verify
 ```
 
-To run only this integration suite:
+To run only this integration suite, use the same command and replace the final Maven arguments with:
 
 ```powershell
 mvn -B -ntp -Dtest=BookingDecisionServicePostgresIntegrationTest test
 ```
+
+The same Maven goals can also be run directly from the host/IDE when Java 21, Maven and Docker connectivity are configured there.
 
 Review the Maven Surefire report for `BookingDecisionServicePostgresIntegrationTest`. Confirm that the class ran and was not skipped before marking Phase 3.6 verified.
 
