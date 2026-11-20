@@ -20,6 +20,8 @@ import java.time.temporal.ChronoUnit;
 import java.util.List;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.parallel.Execution;
+import org.junit.jupiter.api.parallel.ExecutionMode;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.dao.DataAccessException;
@@ -45,6 +47,7 @@ import tools.jackson.databind.ObjectMapper;
 @SpringBootTest(properties = "app.maps.google.enabled=false")
 @ActiveProfiles("test")
 @Testcontainers(disabledWithoutDocker = true)
+@Execution(ExecutionMode.SAME_THREAD)
 class BookingDecisionServicePostgresIntegrationTest {
 
     private static final UUID SEDAN_CATEGORY_ID =
@@ -242,6 +245,7 @@ class BookingDecisionServicePostgresIntegrationTest {
         UUID customerId = UUID.randomUUID();
         UUID operationsUserId = UUID.randomUUID();
         UUID rateCardId = UUID.randomUUID();
+        int rateCardVersion = nextRateCardVersion();
         UUID vehicleId = UUID.randomUUID();
         String vehicleNumber = "IT" + UUID.randomUUID().toString().replace("-", "").substring(0, 10);
         String rateCardCode = "IT_AIRPORT_" + UUID.randomUUID().toString().replace("-", "").substring(0, 12);
@@ -256,9 +260,10 @@ class BookingDecisionServicePostgresIntegrationTest {
                  currency, base_fare, minimum_fare, per_km_rate, per_hour_rate,
                  per_day_rate, included_kilometers, included_hours,
                  driver_allowance_per_day, effective_from, active)
-                VALUES (?, ?, 1, 'AIRPORT_TRANSFER', 'PUNE', ?, 'INR',
+                VALUES (?, ?, ?, 'AIRPORT_TRANSFER', 'PUNE', ?, 'INR',
                         100, 150, 10, 0, 0, 0, 0, 0, ?, FALSE)
-                """, rateCardId, rateCardCode, SEDAN_CATEGORY_ID, Timestamp.from(effectiveFrom));
+                """, rateCardId, rateCardCode, rateCardVersion,
+                SEDAN_CATEGORY_ID, Timestamp.from(effectiveFrom));
 
         jdbcTemplate.update("""
                 INSERT INTO vehicles
@@ -268,7 +273,7 @@ class BookingDecisionServicePostgresIntegrationTest {
                 """, vehicleId, vehicleNumber, SEDAN_CATEGORY_ID, DZIRE_MODEL_ID);
 
         Fixture base = new Fixture(customerId, operationsUserId, rateCardId, rateCardCode,
-                effectiveFrom, vehicleId, vehicleNumber, null, null, null);
+                rateCardVersion, effectiveFrom, vehicleId, vehicleNumber, null, null, null);
         return createBookingForVehicle(base, Instant.now().plus(1, ChronoUnit.DAYS));
     }
 
@@ -289,15 +294,15 @@ class BookingDecisionServicePostgresIntegrationTest {
                  service_type, operating_city, vehicle_category_id, vehicle_category_code,
                  departure_at, rental_hours, currency, distance_meters, duration_seconds,
                  total_amount, created_at, expires_at, response_snapshot)
-                VALUES (?, ?, ?, ?, 1, 'AIRPORT_TRANSFER', 'PUNE', ?, 'EXECUTIVE_SEDAN',
+                VALUES (?, ?, ?, ?, ?, 'AIRPORT_TRANSFER', 'PUNE', ?, 'EXECUTIVE_SEDAN',
                         ?, NULL, 'INR', 10000, 1800, 220.50, ?, ?, '{}'::jsonb)
                 """,
                 quoteId, base.customerId(), base.rateCardId(), base.rateCardCode(),
-                SEDAN_CATEGORY_ID, Timestamp.from(normalizedDeparture),
+                base.rateCardVersion(), SEDAN_CATEGORY_ID, Timestamp.from(normalizedDeparture),
                 Timestamp.from(createdAt), Timestamp.from(expiresAt));
 
         RateCardSnapshot rateCard = new RateCardSnapshot(
-                base.rateCardId(), base.rateCardCode(), 1, ServiceType.AIRPORT_TRANSFER,
+                base.rateCardId(), base.rateCardCode(), base.rateCardVersion(), ServiceType.AIRPORT_TRANSFER,
                 City.PUNE, SEDAN_CATEGORY_ID, "EXECUTIVE_SEDAN", "INR",
                 new BigDecimal("100"), new BigDecimal("150"), new BigDecimal("10"),
                 BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO,
@@ -332,8 +337,19 @@ class BookingDecisionServicePostgresIntegrationTest {
                 Timestamp.from(normalizedDeparture), objectMapper.writeValueAsString(booking));
 
         return new Fixture(base.customerId(), base.operationsUserId(), base.rateCardId(),
-                base.rateCardCode(), base.rateCardEffectiveFrom(), base.vehicleId(), base.vehicleNumber(),
+                base.rateCardCode(), base.rateCardVersion(), base.rateCardEffectiveFrom(),
+                base.vehicleId(), base.vehicleNumber(),
                 bookingId, quoteId, normalizedDeparture);
+    }
+
+    private int nextRateCardVersion() {
+        return jdbcTemplate.queryForObject("""
+                SELECT COALESCE(MAX(version), 0) + 1
+                FROM pricing_rate_cards
+                WHERE service_type = 'AIRPORT_TRANSFER'
+                  AND operating_city = 'PUNE'
+                  AND vehicle_category_id = ?
+                """, Integer.class, SEDAN_CATEGORY_ID);
     }
 
     private void insertUser(UUID userId, String type) {
@@ -370,6 +386,7 @@ class BookingDecisionServicePostgresIntegrationTest {
             UUID operationsUserId,
             UUID rateCardId,
             String rateCardCode,
+            int rateCardVersion,
             Instant rateCardEffectiveFrom,
             UUID vehicleId,
             String vehicleNumber,
