@@ -382,7 +382,7 @@ The customer identity always comes from the authenticated session. A quote ID is
 - A customer may cancel only a `PENDING_CONFIRMATION` booking.
 - Repeating cancellation on an already cancelled booking is idempotent.
 - Cancellation of any other state returns HTTP 409.
-- Payment, cancellation fees/windows, administrator confirmation/rejection, vehicle assignment and driver dispatch are not implemented in this slice. No cancellation fee is invented.
+- Payment, cancellation fees/windows and driver dispatch are not implemented in this slice. Authorized operations confirmation/rejection and vehicle schedule allocation are added in Phase 3.5. No cancellation fee is invented.
 
 ### Persistence
 
@@ -406,3 +406,73 @@ Every create/cancel write also adds an `audit_logs` record and a pending `outbox
 - Booking, event, audit and outbox rows commit or roll back together.
 
 The quote provider remains configured as HTTP 503 while Google Maps is disabled. Runtime booking creation therefore needs a valid persisted quote; do not seed a fabricated route or fare merely to bypass provider configuration. A controlled test fixture can be inserted only in an isolated test database or using the test profile.
+
+
+## Phase 3.5 — Operations decisions and vehicle availability
+
+The operations decision slice is implemented on `feature/phase-3-booking-management`.
+
+### Operations APIs
+
+The following endpoints are restricted to authenticated users with one of these roles: `ADMIN`, `SUPER_ADMIN`, `FLEET_MANAGER` or `DISPATCHER`. POST requests retain the existing CSRF requirement.
+
+| Method | Endpoint | Purpose |
+|---|---|---|
+| GET | `/api/v1/admin/bookings?status=PENDING_CONFIRMATION` | List bookings, optionally filtered by lifecycle status |
+| GET | `/api/v1/admin/bookings/{bookingId}` | Read one booking, active vehicle allocation and decision reason |
+| GET | `/api/v1/admin/bookings/{bookingId}/available-vehicles?reservedUntilAt={ISO-8601}` | Find matching vehicles not reserved during the requested window |
+| POST | `/api/v1/admin/bookings/{bookingId}/confirm` | Confirm a pending booking and reserve a vehicle |
+| POST | `/api/v1/admin/bookings/{bookingId}/reject` | Reject a pending booking with a required reason |
+
+Confirmation request:
+
+```json
+{
+  "vehicleId": "UUID-from-the-fleet-catalog",
+  "reservedUntilAt": "2027-01-15T12:00:00+05:30"
+}
+```
+
+Rejection request:
+
+```json
+{
+  "reason": "No suitable vehicle is available for this time window"
+}
+```
+
+### Confirmation and schedule rules
+
+- The booking must still be `PENDING_CONFIRMATION`, and its scheduled departure must be in the future.
+- The selected vehicle must exist in the active fleet catalogue, have `AVAILABLE` operational status, match the quoted vehicle category and be registered in the booking's operating city.
+- The reservation begins at the departure instant accepted in the fare quote.
+- For `LOCAL_RENTAL`, the reservation must cover at least the full quoted rental package duration.
+- For `AIRPORT_TRANSFER` and `OUTSTATION`, the operations user supplies the reservation end time. The API enforces that the window covers at least the server-calculated route duration. The system does not invent return-empty, overnight, layover or turnaround allowances; configure those policies before automating the end time.
+- The available-vehicles endpoint is an advisory search. A concurrent operator can reserve a vehicle after the search, so the confirmation transaction relies on the database constraint as the final authority.
+- Confirming an already confirmed booking with the same vehicle and identical window is idempotent. A different vehicle/window returns HTTP 409.
+- Rejecting requires a 5–500 character reason. Repeating the same rejection request is idempotent; changing the reason after rejection returns HTTP 409.
+- Only pending bookings can be confirmed or rejected. Customer cancellation remains limited to pending bookings in this slice.
+
+### Database enforcement and audit
+
+Flyway migration `V5__booking_confirmation_and_vehicle_availability.sql` adds:
+
+- `booking_vehicle_allocations` with vehicle, booking, allocating operator and reservation interval.
+- A partial unique index allowing only one active vehicle allocation per booking.
+- A PostgreSQL GiST exclusion constraint over vehicle ID and the half-open reservation interval `[reserved_from_at, reserved_until_at)`. Two active allocations for the same vehicle cannot overlap, including when separate API requests race.
+- `bookings.decision_reason` for the operations rejection reason, with a check constraint tying it to the `REJECTED` status.
+
+The allocation insert, booking status/snapshot update, `booking_events`, `audit_logs` and `outbox_events` writes occur in one transaction. If the database detects an overlapping window, the confirmation is rolled back and returned as HTTP 409. Vehicle allocation does not yet assign a driver or change the vehicle's operational status; the active schedule allocation is the availability ledger for future reservations.
+
+### Verification targets
+
+- Pending booking list/detail is available to authorized operations roles and forbidden to customer-only sessions.
+- A matching `AVAILABLE` vehicle can be reserved and the booking becomes `CONFIRMED`.
+- Wrong-city, wrong-category or non-AVAILABLE vehicles are rejected.
+- A second booking cannot reserve the same vehicle over an overlapping time window; adjacent half-open windows are permitted.
+- A repeated confirmation with the same vehicle and exact interval returns the existing decision without another allocation or event.
+- Reject requires a reason and records the transition atomically; repeating the same rejection does not duplicate events.
+- PostgreSQL V5 applies cleanly against the existing V1–V4 database without dropping volumes or existing customer data.
+- Unit tests cover schedule rules, decision transitions, idempotent operations and the database conflict translation.
+
+A successful live confirmation requires an actual active fleet vehicle and a genuine persisted fare quote. Do not create invented operational vehicles, routes or fares to force a local success case. The API and database conflict behavior should also be exercised with isolated PostgreSQL integration fixtures before production use.
