@@ -476,3 +476,49 @@ The allocation insert, booking status/snapshot update, `booking_events`, `audit_
 - Unit tests cover schedule rules, decision transitions, idempotent operations and the database conflict translation.
 
 A successful live confirmation requires an actual active fleet vehicle and a genuine persisted fare quote. Do not create invented operational vehicles, routes or fares to force a local success case. The API and database conflict behavior should also be exercised with isolated PostgreSQL integration fixtures before production use.
+
+## Phase 3.6 — PostgreSQL-backed booking decision integration tests
+
+Phase 3.6 adds an isolated Testcontainers-backed integration suite for the operations booking decision workflow.
+
+### Test environment
+
+- `BookingDecisionServicePostgresIntegrationTest` starts a disposable `postgis/postgis:18-3.6` container through Testcontainers.
+- Spring Boot connects only to that container through `@DynamicPropertySource`; the suite does not read the local `.env` datasource settings.
+- Flyway applies the same application migrations V1–V5 before the test context is used.
+- The test profile keeps Google Maps disabled. No external geocoding or routing calls are made.
+- Test fixtures use generated user, rate-card, quote, booking and vehicle identifiers in the disposable database. They do not seed the Compose development database or persistent volumes.
+- Testcontainers JUnit Jupiter and PostgreSQL modules use the versions managed by the Spring Boot parent.
+
+Docker must be available to the Maven/JUnit process. The Testcontainers test class is configured to be disabled when Docker is unavailable; a skipped Testcontainers suite is not evidence that the integration assertions passed.
+
+### Integration coverage
+
+The PostgreSQL-backed suite verifies:
+
+- A pending booking is confirmed against a matching, active-category, `AVAILABLE` vehicle and the active allocation is persisted.
+- Repeating confirmation with the same vehicle and exact reservation window returns the original decision without duplicate allocation, booking event, audit row or outbox event.
+- Rejection persists the reason and state transition; repeating the same reason is idempotent, while changing the reason returns HTTP 409.
+- A vehicle already allocated to an overlapping booking is omitted from the availability query. A conflicting confirmation returns HTTP 409 and leaves the second booking pending without partial side effects.
+- An injected audit-write failure rolls back the allocation, booking status/snapshot update, booking event and outbox write in the same transaction.
+- Invalid rejection reasons return HTTP 400 and write no decision records.
+
+The existing `BookingDecisionServiceTest` remains the fast mocked unit-test layer. This Testcontainers suite adds real PostgreSQL, Flyway, JDBC repository and transaction coverage. The separate manual V5 exclusion-constraint check also verified overlapping, adjacent and released intervals.
+
+### Run and verify
+
+Run the complete API verification from `backend/cab-booking-api` in an environment where the Maven/JUnit process can reach Docker:
+
+```powershell
+mvn -B -ntp clean verify
+```
+
+To run only this integration suite:
+
+```powershell
+mvn -B -ntp -Dtest=BookingDecisionServicePostgresIntegrationTest test
+```
+
+Review the Maven Surefire report for `BookingDecisionServicePostgresIntegrationTest`. Confirm that the class ran and was not skipped before marking Phase 3.6 verified.
+
+This suite does not enable Google Maps, configure commercial tariffs, or create operational records. It is a test-only database fixture and does not demonstrate a live customer journey or production fleet assignment.
