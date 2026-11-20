@@ -77,19 +77,20 @@ public class BookingDecisionService {
         BookingResponse current = bookingRepository.findForManagementForUpdate(bookingId)
                 .orElseThrow(() -> new ResourceNotFoundException("Booking was not found."));
 
-        ScheduleWindow window = resolveSchedule(current, reservedUntilAt);
         if (current.status() == BookingStatus.CONFIRMED) {
             BookingRepository.AllocationRow existing = bookingRepository.findActiveAllocation(bookingId)
                     .orElseThrow(() -> new IllegalStateException(
                             "Confirmed booking has no active vehicle allocation."));
-            if (existing.vehicleId().equals(vehicleId)
-                    && existing.reservedFromAt().equals(window.reservedFromAt())
-                    && existing.reservedUntilAt().equals(window.reservedUntilAt())) {
+            Instant requestedEnd = reservedUntilAt == null ? null : reservedUntilAt.toInstant();
+            if (vehicleId != null && vehicleId.equals(existing.vehicleId())
+                    && existing.reservedFromAt().equals(current.quote().journey().departureAt())
+                    && existing.reservedUntilAt().equals(requestedEnd)) {
                 return toManagementResponse(current);
             }
             throw conflict("The booking is already confirmed with a different vehicle or reservation window.");
         }
         requirePending(current);
+        ScheduleWindow window = resolveSchedule(current, reservedUntilAt);
 
         FleetVehicleCatalog.VehicleReference vehicle = fleetVehicleCatalog.findVehicle(vehicleId)
                 .orElseThrow(() -> new ResourceNotFoundException("Active fleet vehicle was not found."));
