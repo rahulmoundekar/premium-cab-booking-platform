@@ -12,9 +12,11 @@ import com.suabhi.cabbooking.journey.provider.ServiceType;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.OffsetDateTime;
+import java.time.temporal.ChronoUnit;
 import java.util.List;
 import java.util.Locale;
 import java.util.UUID;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
@@ -27,6 +29,7 @@ public class BookingDecisionService {
     private final FleetVehicleCatalog fleetVehicleCatalog;
     private final Clock clock;
 
+    @Autowired
     public BookingDecisionService(BookingRepository bookingRepository,
                                   FleetVehicleCatalog fleetVehicleCatalog) {
         this(bookingRepository, fleetVehicleCatalog, Clock.systemUTC());
@@ -81,9 +84,10 @@ public class BookingDecisionService {
             BookingRepository.AllocationRow existing = bookingRepository.findActiveAllocation(bookingId)
                     .orElseThrow(() -> new IllegalStateException(
                             "Confirmed booking has no active vehicle allocation."));
-            Instant requestedEnd = reservedUntilAt == null ? null : reservedUntilAt.toInstant();
+            Instant requestedEnd = reservedUntilAt == null ? null : databasePrecision(reservedUntilAt.toInstant());
+            Instant requestedStart = databasePrecision(current.quote().journey().departureAt());
             if (vehicleId != null && vehicleId.equals(existing.vehicleId())
-                    && existing.reservedFromAt().equals(current.quote().journey().departureAt())
+                    && existing.reservedFromAt().equals(requestedStart)
                     && existing.reservedUntilAt().equals(requestedEnd)) {
                 return toManagementResponse(current);
             }
@@ -157,14 +161,14 @@ public class BookingDecisionService {
 
     private ScheduleWindow resolveSchedule(BookingResponse booking, OffsetDateTime requestedEnd) {
         requirePendingOrConfirmed(booking);
-        Instant reservedFromAt = booking.quote().journey().departureAt();
+        Instant reservedFromAt = databasePrecision(booking.quote().journey().departureAt());
         if (reservedFromAt == null || !reservedFromAt.isAfter(clock.instant())) {
             throw conflict("The scheduled departure is no longer in the future.");
         }
         if (requestedEnd == null) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "reservedUntilAt is required.");
         }
-        Instant reservedUntilAt = requestedEnd.toInstant();
+        Instant reservedUntilAt = databasePrecision(requestedEnd.toInstant());
         if (!reservedUntilAt.isAfter(reservedFromAt)) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
                     "reservedUntilAt must be after the scheduled departure.");
@@ -206,6 +210,10 @@ public class BookingDecisionService {
         return new BookingAllocationResponse(
                 allocation.id(), allocation.vehicleId(), allocation.vehicleNumber(),
                 allocation.reservedFromAt(), allocation.reservedUntilAt());
+    }
+
+    private static Instant databasePrecision(Instant value) {
+        return value.truncatedTo(ChronoUnit.MICROS);
     }
 
     private void requirePending(BookingResponse booking) {
