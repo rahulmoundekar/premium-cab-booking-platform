@@ -100,7 +100,7 @@ class BookingDecisionServicePostgresIntegrationTest {
 
         assertThat(readBookingStatus(fixture.bookingId())).isEqualTo("CONFIRMED");
         assertThat(readBookingSnapshotStatus(fixture.bookingId())).isEqualTo("CONFIRMED");
-        assertThat(count("SELECT count(*) FROM booking_vehicle_allocations 
+        assertThat(count("SELECT count(*) FROM booking_vehicle_allocations "
                 + "WHERE booking_id = ? AND allocation_status = 'ACTIVE'", fixture.bookingId())).isEqualTo(1);
         assertConfirmationSideEffects(fixture.bookingId(), 1);
 
