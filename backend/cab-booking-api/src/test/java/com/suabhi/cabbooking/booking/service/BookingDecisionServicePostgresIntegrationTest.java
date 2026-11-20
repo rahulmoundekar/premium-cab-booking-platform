@@ -38,7 +38,7 @@ import org.testcontainers.utility.DockerImageName;
 import tools.jackson.databind.ObjectMapper;
 
 /**
- * PostgreSQL-backed integration tests for the Phase 3.6 booking decision workflow.
+ * PostgreSQL-backed integration tests for booking decisions and customer lifecycle persistence.
  *
  * <p>The container runs the same PostGIS major/image family as local development.
  * Flyway applies the production V1-V5 migrations to this disposable database.
@@ -64,6 +64,9 @@ class BookingDecisionServicePostgresIntegrationTest {
 
     @Autowired
     private BookingDecisionService bookingDecisionService;
+
+    @Autowired
+    private BookingService bookingService;
 
     @Autowired
     private JdbcTemplate jdbcTemplate;
@@ -272,6 +275,128 @@ class BookingDecisionServicePostgresIntegrationTest {
         assertThat(count("SELECT count(*) FROM audit_logs WHERE aggregate_id = ?",
                 fixture.bookingId().toString())).isZero();
         assertThat(count("SELECT count(*) FROM outbox_events WHERE aggregate_id = ?",
+                fixture.bookingId().toString())).isZero();
+    }
+
+
+    @Test
+    void cancelsPendingBookingOnceAndPersistsEventAuditAndOutbox() {
+        Fixture fixture = createFixture();
+
+        BookingResponse firstResult = bookingService.cancel(fixture.customerId(), fixture.bookingId());
+        BookingResponse replayResult = bookingService.cancel(fixture.customerId(), fixture.bookingId());
+
+        assertThat(firstResult.status()).isEqualTo(BookingStatus.CANCELLED);
+        assertThat(firstResult.cancelledAt()).isNotNull();
+        assertThat(replayResult.status()).isEqualTo(BookingStatus.CANCELLED);
+        assertThat(replayResult.cancelledAt()).isEqualTo(firstResult.cancelledAt());
+
+        assertThat(readBookingStatus(fixture.bookingId())).isEqualTo("CANCELLED");
+        assertThat(readBookingSnapshotStatus(fixture.bookingId())).isEqualTo("CANCELLED");
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT cancelled_at IS NOT NULL FROM bookings WHERE id = ?", Boolean.class, fixture.bookingId()))
+                .isTrue();
+        assertThat(count("SELECT count(*) FROM booking_events "
+                + "WHERE booking_id = ? AND event_type = 'BOOKING_CANCELLED' "
+                + "AND from_status = 'PENDING_CONFIRMATION' AND to_status = 'CANCELLED'",
+                fixture.bookingId())).isEqualTo(1);
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT actor_user_id FROM booking_events "
+                        + "WHERE booking_id = ? AND event_type = 'BOOKING_CANCELLED'",
+                UUID.class, fixture.bookingId())).isEqualTo(fixture.customerId());
+        assertThat(count("SELECT count(*) FROM audit_logs "
+                + "WHERE aggregate_type = 'BOOKING' AND aggregate_id = ? AND action = 'BOOKING_CANCELLED'",
+                fixture.bookingId().toString())).isEqualTo(1);
+        assertThat(count("SELECT count(*) FROM outbox_events "
+                + "WHERE aggregate_type = 'BOOKING' AND aggregate_id = ? AND event_type = 'BOOKING_CANCELLED'",
+                fixture.bookingId().toString())).isEqualTo(1);
+        assertThat(count("SELECT count(*) FROM booking_vehicle_allocations "
+                + "WHERE booking_id = ? AND allocation_status = 'ACTIVE'", fixture.bookingId())).isZero();
+    }
+
+    @Test
+    void customerCancellationCannotOverwriteAnOperationsDecisionAndCancelledBookingCannotBeConfirmed() {
+        Fixture confirmed = createFixture();
+        Instant confirmedUntil = confirmed.departureAt().plusSeconds(7_200);
+        bookingDecisionService.confirm(
+                confirmed.operationsUserId(), confirmed.bookingId(), confirmed.vehicleId(),
+                OffsetDateTime.ofInstant(confirmedUntil, ZoneOffset.UTC));
+
+        assertThatThrownBy(() -> bookingService.cancel(confirmed.customerId(), confirmed.bookingId()))
+                .isInstanceOfSatisfying(ResponseStatusException.class, exception ->
+                        assertThat(exception.getStatusCode()).isEqualTo(HttpStatus.CONFLICT));
+        assertThat(readBookingStatus(confirmed.bookingId())).isEqualTo("CONFIRMED");
+        assertThat(count("SELECT count(*) FROM booking_vehicle_allocations "
+                + "WHERE booking_id = ? AND allocation_status = 'ACTIVE'", confirmed.bookingId())).isEqualTo(1);
+        assertThat(count("SELECT count(*) FROM booking_events "
+                + "WHERE booking_id = ? AND event_type = 'BOOKING_CANCELLED'", confirmed.bookingId())).isZero();
+
+        Fixture rejected = createFixture();
+        bookingDecisionService.reject(
+                rejected.operationsUserId(), rejected.bookingId(), "No eligible vehicle for this service window");
+        assertThatThrownBy(() -> bookingService.cancel(rejected.customerId(), rejected.bookingId()))
+                .isInstanceOfSatisfying(ResponseStatusException.class, exception ->
+                        assertThat(exception.getStatusCode()).isEqualTo(HttpStatus.CONFLICT));
+        assertThat(readBookingStatus(rejected.bookingId())).isEqualTo("REJECTED");
+        assertThat(count("SELECT count(*) FROM booking_events "
+                + "WHERE booking_id = ? AND event_type = 'BOOKING_CANCELLED'", rejected.bookingId())).isZero();
+
+        Fixture cancelled = createFixture();
+        bookingService.cancel(cancelled.customerId(), cancelled.bookingId());
+        Instant cancelledUntil = cancelled.departureAt().plusSeconds(7_200);
+        assertThatThrownBy(() -> bookingDecisionService.confirm(
+                cancelled.operationsUserId(), cancelled.bookingId(), cancelled.vehicleId(),
+                OffsetDateTime.ofInstant(cancelledUntil, ZoneOffset.UTC)))
+                .isInstanceOfSatisfying(ResponseStatusException.class, exception ->
+                        assertThat(exception.getStatusCode()).isEqualTo(HttpStatus.CONFLICT));
+        assertThat(readBookingStatus(cancelled.bookingId())).isEqualTo("CANCELLED");
+        assertThat(count("SELECT count(*) FROM booking_vehicle_allocations WHERE booking_id = ?",
+                cancelled.bookingId())).isZero();
+    }
+
+    @Test
+    void rollsBackCancellationStatusAndLifecycleRecordsWhenAuditWriteFails() {
+        Fixture fixture = createFixture();
+
+        jdbcTemplate.execute("""
+                CREATE OR REPLACE FUNCTION it_fail_booking_cancellation_audit()
+                RETURNS trigger
+                LANGUAGE plpgsql
+                AS $body$
+                BEGIN
+                    IF NEW.action = 'BOOKING_CANCELLED' THEN
+                        RAISE EXCEPTION 'forced Phase 3.7 cancellation audit failure';
+                    END IF;
+                    RETURN NEW;
+                END;
+                $body$
+                """);
+        jdbcTemplate.execute("""
+                CREATE TRIGGER it_fail_booking_cancellation_audit_trigger
+                BEFORE INSERT ON audit_logs
+                FOR EACH ROW
+                EXECUTE FUNCTION it_fail_booking_cancellation_audit()
+                """);
+
+        try {
+            assertThatThrownBy(() -> bookingService.cancel(fixture.customerId(), fixture.bookingId()))
+                    .isInstanceOf(DataAccessException.class);
+        } finally {
+            jdbcTemplate.execute("""
+                    DROP TRIGGER IF EXISTS it_fail_booking_cancellation_audit_trigger ON audit_logs
+                    """);
+            jdbcTemplate.execute("DROP FUNCTION IF EXISTS it_fail_booking_cancellation_audit()");
+        }
+
+        assertThat(readBookingStatus(fixture.bookingId())).isEqualTo("PENDING_CONFIRMATION");
+        assertThat(readBookingSnapshotStatus(fixture.bookingId())).isEqualTo("PENDING_CONFIRMATION");
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT cancelled_at IS NULL FROM bookings WHERE id = ?", Boolean.class, fixture.bookingId()))
+                .isTrue();
+        assertThat(count("SELECT count(*) FROM booking_events WHERE booking_id = ?", fixture.bookingId())).isZero();
+        assertThat(count("SELECT count(*) FROM audit_logs WHERE aggregate_type = 'BOOKING' AND aggregate_id = ?",
+                fixture.bookingId().toString())).isZero();
+        assertThat(count("SELECT count(*) FROM outbox_events WHERE aggregate_type = 'BOOKING' AND aggregate_id = ?",
                 fixture.bookingId().toString())).isZero();
     }
 
