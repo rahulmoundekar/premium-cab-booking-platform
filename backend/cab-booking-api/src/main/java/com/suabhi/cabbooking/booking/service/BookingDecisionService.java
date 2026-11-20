@@ -213,7 +213,7 @@ public class BookingDecisionService {
     }
 
     private static Instant databasePrecision(Instant value) {
-        return value.truncatedTo(ChronoUnit.MICROS);
+        return value == null ? null : value.truncatedTo(ChronoUnit.MICROS);
     }
 
     private void requirePending(BookingResponse booking) {
