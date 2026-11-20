@@ -99,7 +99,8 @@ class BookingDecisionServicePostgresIntegrationTest {
         assertThat(replayResult.allocation().vehicleId()).isEqualTo(fixture.vehicleId());
 
         assertThat(readBookingStatus(fixture.bookingId())).isEqualTo("CONFIRMED");
-        assertThat(count("SELECT count(*) FROM booking_vehicle_allocations "
+        assertThat(readBookingSnapshotStatus(fixture.bookingId())).isEqualTo("CONFIRMED");
+        assertThat(count("SELECT count(*) FROM booking_vehicle_allocations 
                 + "WHERE booking_id = ? AND allocation_status = 'ACTIVE'", fixture.bookingId())).isEqualTo(1);
         assertConfirmationSideEffects(fixture.bookingId(), 1);
 
@@ -126,6 +127,7 @@ class BookingDecisionServicePostgresIntegrationTest {
         assertThat(replayResult.booking().status()).isEqualTo(BookingStatus.REJECTED);
         assertThat(replayResult.decisionReason()).isEqualTo(reason);
         assertThat(readBookingStatus(fixture.bookingId())).isEqualTo("REJECTED");
+        assertThat(readBookingSnapshotStatus(fixture.bookingId())).isEqualTo("REJECTED");
         assertThat(jdbcTemplate.queryForObject(
                 "SELECT decision_reason FROM bookings WHERE id = ?", String.class, fixture.bookingId()))
                 .isEqualTo(reason);
@@ -175,6 +177,34 @@ class BookingDecisionServicePostgresIntegrationTest {
     }
 
     @Test
+    void allowsAdjacentHalfOpenReservationsForTheSameVehicle() throws Exception {
+        Fixture first = createFixture();
+        Fixture adjacent = createBookingForVehicle(first, first.departureAt().plusSeconds(7_200));
+        Instant firstEnd = first.departureAt().plusSeconds(7_200);
+        Instant adjacentEnd = adjacent.departureAt().plusSeconds(7_200);
+
+        bookingDecisionService.confirm(
+                first.operationsUserId(), first.bookingId(), first.vehicleId(),
+                OffsetDateTime.ofInstant(firstEnd, ZoneOffset.UTC));
+
+        var availableForAdjacentWindow = bookingDecisionService.findAvailableVehicles(
+                adjacent.bookingId(), OffsetDateTime.ofInstant(adjacentEnd, ZoneOffset.UTC));
+        assertThat(availableForAdjacentWindow)
+                .extracting("vehicleId")
+                .containsExactly(first.vehicleId());
+
+        var secondResult = bookingDecisionService.confirm(
+                adjacent.operationsUserId(), adjacent.bookingId(), adjacent.vehicleId(),
+                OffsetDateTime.ofInstant(adjacentEnd, ZoneOffset.UTC));
+
+        assertThat(secondResult.booking().status()).isEqualTo(BookingStatus.CONFIRMED);
+        assertThat(count("SELECT count(*) FROM booking_vehicle_allocations "
+                + "WHERE vehicle_id = ? AND allocation_status = 'ACTIVE'", first.vehicleId())).isEqualTo(2);
+        assertConfirmationSideEffects(first.bookingId(), 1);
+        assertConfirmationSideEffects(adjacent.bookingId(), 1);
+    }
+
+    @Test
     void rollsBackAllocationBookingEventAndOutboxWhenAuditWriteFails() throws Exception {
         Fixture fixture = createFixture();
         Instant reservedUntil = fixture.departureAt().plusSeconds(7_200);
@@ -212,6 +242,7 @@ class BookingDecisionServicePostgresIntegrationTest {
         }
 
         assertThat(readBookingStatus(fixture.bookingId())).isEqualTo("PENDING_CONFIRMATION");
+        assertThat(readBookingSnapshotStatus(fixture.bookingId())).isEqualTo("PENDING_CONFIRMATION");
         assertThat(count("SELECT count(*) FROM booking_vehicle_allocations WHERE booking_id = ?",
                 fixture.bookingId())).isZero();
         assertThat(count("SELECT count(*) FROM booking_events WHERE booking_id = ?",
@@ -363,6 +394,12 @@ class BookingDecisionServicePostgresIntegrationTest {
     private String readBookingStatus(UUID bookingId) {
         return jdbcTemplate.queryForObject(
                 "SELECT status FROM bookings WHERE id = ?", String.class, bookingId);
+    }
+
+    private String readBookingSnapshotStatus(UUID bookingId) {
+        return jdbcTemplate.queryForObject(
+                "SELECT booking_snapshot ->> 'status' FROM bookings WHERE id = ?",
+                String.class, bookingId);
     }
 
     private long count(String sql, Object... arguments) {
