@@ -30,8 +30,13 @@ Standalone premium cab-booking platform for Pune and Mumbai. This repository has
 | GET | `/api/v1/customer/bookings` | List the signed-in customer's bookings |
 | GET | `/api/v1/customer/bookings/{bookingId}` | Read one owned booking |
 | POST | `/api/v1/customer/bookings/{bookingId}/cancel` | Cancel a booking still pending confirmation |
+| GET | `/api/v1/admin/bookings` | Review bookings, optionally filtered by lifecycle status |
+| GET | `/api/v1/admin/bookings/{bookingId}` | Review one booking and its vehicle allocation/decision |
+| GET | `/api/v1/admin/bookings/{bookingId}/available-vehicles` | Find matching vehicles free for the requested reservation window |
+| POST | `/api/v1/admin/bookings/{bookingId}/confirm` | Confirm a pending booking and reserve a vehicle |
+| POST | `/api/v1/admin/bookings/{bookingId}/reject` | Reject a pending booking with a recorded reason |
 
-Payment collection, driver assignment, dispatch and live tracking are not implemented yet. Booking creation from an owned, unexpired quote, idempotent retries, customer booking history and cancellation while pending confirmation are implemented; new bookings remain `PENDING_CONFIRMATION` until a later availability/dispatch workflow confirms them. Customer fare-quote persistence and calculation are implemented behind the journey provider; live route-based quotes return HTTP 503 until a real route/geocoding provider is configured. Account recovery and email verification are also pending.
+Payment collection, driver assignment, dispatch and live tracking are not implemented yet. Booking creation from an owned, unexpired quote, idempotent retries, customer booking history and cancellation while pending confirmation are implemented. Authorized operations users can review, confirm or reject pending bookings; confirmation reserves a matching fleet vehicle over a PostgreSQL-enforced schedule window. Customer fare-quote persistence and calculation are implemented behind the journey provider; live route-based quotes return HTTP 503 until a real route/geocoding provider is configured. Account recovery and email verification are also pending.
 
 ### Authentication and security baseline
 
@@ -39,6 +44,7 @@ Payment collection, driver assignment, dispatch and live tracking are not implem
 - Session ID rotation after successful login.
 - CSRF protection for unsafe HTTP methods.
 - Customer routes require the CUSTOMER role.
+- Booking operations routes require ADMIN, SUPER_ADMIN, FLEET_MANAGER or DISPATCHER; unsafe methods retain CSRF protection.
 - Local cookie flags are configured for HTTP development. Production deployment must use HTTPS, Secure cookies, HSTS, exact CORS origins and managed secrets.
 - The admin preview login is demo-only, bundled into the frontend, and is not an authentication boundary. Keep the admin service bound to loopback until real backend authentication and authorization are implemented.
 
