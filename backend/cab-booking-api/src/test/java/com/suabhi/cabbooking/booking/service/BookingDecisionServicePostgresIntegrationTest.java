@@ -190,7 +190,7 @@ class BookingDecisionServicePostgresIntegrationTest {
         var availableForAdjacentWindow = bookingDecisionService.findAvailableVehicles(
                 adjacent.bookingId(), OffsetDateTime.ofInstant(adjacentEnd, ZoneOffset.UTC));
         assertThat(availableForAdjacentWindow)
-                .extracting("vehicleId")
+                .extracting(vehicle -> vehicle.vehicleId())
                 .containsExactly(first.vehicleId());
 
         var secondResult = bookingDecisionService.confirm(
