@@ -52,7 +52,7 @@ public class DriverAssignmentService {
         }
         return driverRepository.findAvailableDrivers(bookingId).stream()
                 .map(driver -> new DriverOptionResponse(
-                        driver.id(), driver.driverCode(), null, driver.licenseExpiry()))
+                        driver.id(), driver.driverCode(), driver.fullName(), driver.licenseExpiry()))
                 .toList();
     }
 
