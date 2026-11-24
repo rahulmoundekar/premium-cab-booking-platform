@@ -4,7 +4,9 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.suabhi.cabbooking.booking.api.BookingResponse;
+import com.suabhi.cabbooking.booking.api.DriverOptionResponse;
 import com.suabhi.cabbooking.booking.domain.BookingStatus;
+import com.suabhi.cabbooking.common.exception.ResourceNotFoundException;
 import com.suabhi.cabbooking.journey.api.JourneyPreviewResponse;
 import com.suabhi.cabbooking.journey.provider.City;
 import com.suabhi.cabbooking.journey.provider.ServiceType;
@@ -14,6 +16,8 @@ import com.suabhi.cabbooking.pricing.domain.FareCalculationResult;
 import java.math.BigDecimal;
 import java.sql.Timestamp;
 import java.time.Instant;
+import java.time.LocalDate;
+import java.time.ZoneId;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
 import java.time.temporal.ChronoUnit;
@@ -54,6 +58,8 @@ class BookingDecisionServicePostgresIntegrationTest {
             UUID.fromString("20000000-0000-0000-0000-000000000001");
     private static final UUID DZIRE_MODEL_ID =
             UUID.fromString("30000000-0000-0000-0000-000000000001");
+    private static final UUID DRIVER_ROLE_ID =
+            UUID.fromString("10000000-0000-0000-0000-000000000002");
 
     @Container
     private static final PostgreSQLContainer POSTGRES = new PostgreSQLContainer(
@@ -67,6 +73,9 @@ class BookingDecisionServicePostgresIntegrationTest {
 
     @Autowired
     private BookingService bookingService;
+
+    @Autowired
+    private DriverAssignmentService driverAssignmentService;
 
     @Autowired
     private JdbcTemplate jdbcTemplate;
@@ -400,6 +409,315 @@ class BookingDecisionServicePostgresIntegrationTest {
                 fixture.bookingId().toString())).isZero();
     }
 
+
+    @Test
+    void listsOnlyVerifiedAvailableLicensedDriversInTheBookingCity() throws Exception {
+        Fixture fixture = createConfirmedFixture();
+        LocalDate validExpiry = LocalDate.now(ZoneId.of("Asia/Kolkata")).plusYears(1);
+        DriverFixture eligible = createDriver("VERIFIED", "AVAILABLE", validExpiry, "PUNE", true);
+        DriverFixture pending = createDriver("PENDING", "AVAILABLE", validExpiry, "PUNE", true);
+        DriverFixture offline = createDriver("VERIFIED", "OFFLINE", validExpiry, "PUNE", true);
+        DriverFixture expired = createDriver("VERIFIED", "AVAILABLE",
+                LocalDate.now(ZoneId.of("Asia/Kolkata")).minusDays(1), "PUNE", true);
+        DriverFixture wrongCity = createDriver("VERIFIED", "AVAILABLE", validExpiry, "MUMBAI", true);
+        DriverFixture noDriverRole = createDriver("VERIFIED", "AVAILABLE", validExpiry, "PUNE", false);
+
+        List<DriverOptionResponse> options = driverAssignmentService.findAvailableDrivers(fixture.bookingId());
+
+        assertThat(options).extracting(DriverOptionResponse::driverProfileId).contains(eligible.profileId());
+        assertThat(options).extracting(DriverOptionResponse::driverProfileId)
+                .doesNotContain(pending.profileId(), offline.profileId(), expired.profileId(),
+                        wrongCity.profileId(), noDriverRole.profileId());
+        assertThat(options.stream().filter(option -> option.driverProfileId().equals(eligible.profileId()))
+                .findFirst().orElseThrow().fullName()).isEqualTo(eligible.fullName());
+    }
+
+    @Test
+    void assignsDriverOnceAndPersistsAssignmentEventAuditAndOutbox() throws Exception {
+        Fixture fixture = createConfirmedFixture();
+        DriverFixture driver = createDriver("VERIFIED", "AVAILABLE",
+                LocalDate.now(ZoneId.of("Asia/Kolkata")).plusYears(1), "PUNE", true);
+
+        var firstResult = driverAssignmentService.assignDriver(
+                fixture.operationsUserId(), fixture.bookingId(), driver.profileId());
+        var replayResult = driverAssignmentService.assignDriver(
+                fixture.operationsUserId(), fixture.bookingId(), driver.profileId());
+
+        assertThat(firstResult.booking().status()).isEqualTo(BookingStatus.ASSIGNED);
+        assertThat(firstResult.driverProfileId()).isEqualTo(driver.profileId());
+        assertThat(firstResult.vehicleId()).isEqualTo(fixture.vehicleId());
+        assertThat(replayResult.booking().status()).isEqualTo(BookingStatus.ASSIGNED);
+        assertThat(replayResult.driverProfileId()).isEqualTo(driver.profileId());
+        assertThat(readBookingStatus(fixture.bookingId())).isEqualTo("ASSIGNED");
+        assertThat(readBookingSnapshotStatus(fixture.bookingId())).isEqualTo("ASSIGNED");
+        assertThat(count("SELECT count(*) FROM booking_driver_assignments WHERE booking_id = ?",
+                fixture.bookingId())).isEqualTo(1);
+        assertThat(count("SELECT count(*) FROM booking_events "
+                + "WHERE booking_id = ? AND event_type = 'BOOKING_DRIVER_ASSIGNED'",
+                fixture.bookingId())).isEqualTo(1);
+        assertThat(count("SELECT count(*) FROM audit_logs "
+                + "WHERE aggregate_type = 'BOOKING' AND aggregate_id = ? "
+                + "AND action = 'BOOKING_DRIVER_ASSIGNED'", fixture.bookingId().toString())).isEqualTo(1);
+        assertThat(count("SELECT count(*) FROM outbox_events "
+                + "WHERE aggregate_type = 'BOOKING' AND aggregate_id = ? "
+                + "AND event_type = 'BOOKING_DRIVER_ASSIGNED'", fixture.bookingId().toString())).isEqualTo(1);
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT availability_status FROM driver_profiles WHERE id = ?",
+                String.class, driver.profileId())).isEqualTo("AVAILABLE");
+        assertThat(driverAssignmentService.findTrips(driver.userId()))
+                .extracting(trip -> trip.booking().id()).contains(fixture.bookingId());
+    }
+
+    @Test
+    void preventsOverlappingDriverAssignmentsAcrossDifferentVehicles() throws Exception {
+        Fixture first = createConfirmedFixture();
+        Fixture second = createConfirmedFixture();
+        DriverFixture driver = createDriver("VERIFIED", "AVAILABLE",
+                LocalDate.now(ZoneId.of("Asia/Kolkata")).plusYears(1), "PUNE", true);
+
+        driverAssignmentService.assignDriver(first.operationsUserId(), first.bookingId(), driver.profileId());
+
+        assertThat(driverAssignmentService.findAvailableDrivers(second.bookingId()))
+                .extracting(DriverOptionResponse::driverProfileId)
+                .doesNotContain(driver.profileId());
+        assertThatThrownBy(() -> driverAssignmentService.assignDriver(
+                second.operationsUserId(), second.bookingId(), driver.profileId()))
+                .isInstanceOfSatisfying(ResponseStatusException.class, exception ->
+                        assertThat(exception.getStatusCode()).isEqualTo(HttpStatus.CONFLICT));
+        assertThat(readBookingStatus(second.bookingId())).isEqualTo("CONFIRMED");
+        assertThat(count("SELECT count(*) FROM booking_driver_assignments WHERE driver_profile_id = ?",
+                driver.profileId())).isEqualTo(1);
+    }
+
+    @Test
+    void rejectsDriversWithInvalidVerificationAvailabilityLicenseCityOrRole() throws Exception {
+        Fixture fixture = createConfirmedFixture();
+        LocalDate validExpiry = LocalDate.now(ZoneId.of("Asia/Kolkata")).plusYears(1);
+        List<DriverFixture> invalidDrivers = List.of(
+                createDriver("PENDING", "AVAILABLE", validExpiry, "PUNE", true),
+                createDriver("VERIFIED", "OFFLINE", validExpiry, "PUNE", true),
+                createDriver("VERIFIED", "AVAILABLE",
+                        LocalDate.now(ZoneId.of("Asia/Kolkata")).minusDays(1), "PUNE", true),
+                createDriver("VERIFIED", "AVAILABLE", validExpiry, "MUMBAI", true),
+                createDriver("VERIFIED", "AVAILABLE", validExpiry, "PUNE", false));
+
+        for (DriverFixture driver : invalidDrivers) {
+            assertThatThrownBy(() -> driverAssignmentService.assignDriver(
+                    fixture.operationsUserId(), fixture.bookingId(), driver.profileId()))
+                    .isInstanceOf(RuntimeException.class);
+            assertThat(readBookingStatus(fixture.bookingId())).isEqualTo("CONFIRMED");
+            assertThat(count("SELECT count(*) FROM booking_driver_assignments WHERE booking_id = ?",
+                    fixture.bookingId())).isZero();
+        }
+    }
+
+    @Test
+    void driverCanStartAndCompleteOnlyTheirOwnAssignedTrip() throws Exception {
+        Fixture fixture = createConfirmedFixture();
+        DriverFixture driver = createDriver("VERIFIED", "AVAILABLE",
+                LocalDate.now(ZoneId.of("Asia/Kolkata")).plusYears(1), "PUNE", true);
+        DriverFixture otherDriver = createDriver("VERIFIED", "AVAILABLE",
+                LocalDate.now(ZoneId.of("Asia/Kolkata")).plusYears(1), "PUNE", true);
+        driverAssignmentService.assignDriver(fixture.operationsUserId(), fixture.bookingId(), driver.profileId());
+
+        assertThatThrownBy(() -> driverAssignmentService.findTrip(otherDriver.userId(), fixture.bookingId()))
+                .isInstanceOf(ResourceNotFoundException.class);
+        assertThatThrownBy(() -> driverAssignmentService.startTrip(otherDriver.userId(), fixture.bookingId()))
+                .isInstanceOf(ResourceNotFoundException.class);
+        assertThatThrownBy(() -> driverAssignmentService.completeTrip(driver.userId(), fixture.bookingId()))
+                .isInstanceOfSatisfying(ResponseStatusException.class, exception ->
+                        assertThat(exception.getStatusCode()).isEqualTo(HttpStatus.CONFLICT));
+        assertThatThrownBy(() -> driverAssignmentService.startTrip(driver.userId(), fixture.bookingId()))
+                .isInstanceOfSatisfying(ResponseStatusException.class, exception ->
+                        assertThat(exception.getStatusCode()).isEqualTo(HttpStatus.CONFLICT));
+
+        Instant scheduleNow = Instant.now().truncatedTo(ChronoUnit.MICROS);
+        jdbcTemplate.update("""
+                UPDATE booking_driver_assignments
+                SET reserved_from_at = ?, reserved_until_at = ?
+                WHERE booking_id = ?
+                """, Timestamp.from(scheduleNow.minusSeconds(60)),
+                Timestamp.from(scheduleNow.plusSeconds(3_600)), fixture.bookingId());
+
+        var started = driverAssignmentService.startTrip(driver.userId(), fixture.bookingId());
+        var startReplay = driverAssignmentService.startTrip(driver.userId(), fixture.bookingId());
+        assertThat(started.booking().status()).isEqualTo(BookingStatus.IN_PROGRESS);
+        assertThat(started.startedAt()).isNotNull();
+        assertThat(startReplay.startedAt()).isEqualTo(started.startedAt());
+        assertThat(readBookingStatus(fixture.bookingId())).isEqualTo("IN_PROGRESS");
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT availability_status FROM driver_profiles WHERE id = ?",
+                String.class, driver.profileId())).isEqualTo("ON_TRIP");
+        assertThat(count("SELECT count(*) FROM booking_events "
+                + "WHERE booking_id = ? AND event_type = 'BOOKING_TRIP_STARTED'",
+                fixture.bookingId())).isEqualTo(1);
+        assertThat(count("SELECT count(*) FROM audit_logs "
+                + "WHERE aggregate_id = ? AND action = 'BOOKING_TRIP_STARTED'",
+                fixture.bookingId().toString())).isEqualTo(1);
+        assertThat(count("SELECT count(*) FROM outbox_events "
+                + "WHERE aggregate_id = ? AND event_type = 'BOOKING_TRIP_STARTED'",
+                fixture.bookingId().toString())).isEqualTo(1);
+
+        var completed = driverAssignmentService.completeTrip(driver.userId(), fixture.bookingId());
+        var completionReplay = driverAssignmentService.completeTrip(driver.userId(), fixture.bookingId());
+        assertThat(completed.booking().status()).isEqualTo(BookingStatus.COMPLETED);
+        assertThat(completed.completedAt()).isNotNull();
+        assertThat(completionReplay.completedAt()).isEqualTo(completed.completedAt());
+        assertThat(readBookingStatus(fixture.bookingId())).isEqualTo("COMPLETED");
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT availability_status FROM driver_profiles WHERE id = ?",
+                String.class, driver.profileId())).isEqualTo("AVAILABLE");
+        assertThat(count("SELECT count(*) FROM booking_events "
+                + "WHERE booking_id = ? AND event_type = 'BOOKING_TRIP_COMPLETED'",
+                fixture.bookingId())).isEqualTo(1);
+        assertThat(count("SELECT count(*) FROM audit_logs "
+                + "WHERE aggregate_id = ? AND action = 'BOOKING_TRIP_COMPLETED'",
+                fixture.bookingId().toString())).isEqualTo(1);
+        assertThat(count("SELECT count(*) FROM outbox_events "
+                + "WHERE aggregate_id = ? AND event_type = 'BOOKING_TRIP_COMPLETED'",
+                fixture.bookingId().toString())).isEqualTo(1);
+        assertThat(driverAssignmentService.findTrips(driver.userId()))
+                .extracting(trip -> trip.booking().id()).contains(fixture.bookingId());
+    }
+
+    @Test
+    void rollsBackDriverAssignmentWhenAuditWriteFails() throws Exception {
+        Fixture fixture = createConfirmedFixture();
+        DriverFixture driver = createDriver("VERIFIED", "AVAILABLE",
+                LocalDate.now(ZoneId.of("Asia/Kolkata")).plusYears(1), "PUNE", true);
+
+        jdbcTemplate.execute("""
+                CREATE OR REPLACE FUNCTION it_fail_driver_assignment_audit()
+                RETURNS trigger
+                LANGUAGE plpgsql
+                AS $body$
+                BEGIN
+                    IF NEW.action = 'BOOKING_DRIVER_ASSIGNED' THEN
+                        RAISE EXCEPTION 'forced Phase 3.8 assignment audit failure';
+                    END IF;
+                    RETURN NEW;
+                END;
+                $body$
+                """);
+        jdbcTemplate.execute("""
+                CREATE TRIGGER it_fail_driver_assignment_audit_trigger
+                BEFORE INSERT ON audit_logs
+                FOR EACH ROW
+                EXECUTE FUNCTION it_fail_driver_assignment_audit()
+                """);
+
+        try {
+            assertThatThrownBy(() -> driverAssignmentService.assignDriver(
+                    fixture.operationsUserId(), fixture.bookingId(), driver.profileId()))
+                    .isInstanceOf(DataAccessException.class);
+        } finally {
+            jdbcTemplate.execute("DROP TRIGGER IF EXISTS it_fail_driver_assignment_audit_trigger ON audit_logs");
+            jdbcTemplate.execute("DROP FUNCTION IF EXISTS it_fail_driver_assignment_audit()");
+        }
+
+        assertThat(readBookingStatus(fixture.bookingId())).isEqualTo("CONFIRMED");
+        assertThat(readBookingSnapshotStatus(fixture.bookingId())).isEqualTo("CONFIRMED");
+        assertThat(count("SELECT count(*) FROM booking_driver_assignments WHERE booking_id = ?",
+                fixture.bookingId())).isZero();
+        assertThat(count("SELECT count(*) FROM booking_events WHERE booking_id = ?",
+                fixture.bookingId())).isEqualTo(1); // the earlier booking confirmation remains intact
+        assertThat(count("SELECT count(*) FROM audit_logs WHERE aggregate_id = ? AND action = 'BOOKING_DRIVER_ASSIGNED'",
+                fixture.bookingId().toString())).isZero();
+        assertThat(count("SELECT count(*) FROM outbox_events WHERE aggregate_id = ? "
+                + "AND event_type = 'BOOKING_DRIVER_ASSIGNED'", fixture.bookingId().toString())).isZero();
+    }
+
+    @Test
+    void rollsBackDriverStartAndAvailabilityWhenTripAuditWriteFails() throws Exception {
+        Fixture fixture = createConfirmedFixture();
+        DriverFixture driver = createDriver("VERIFIED", "AVAILABLE",
+                LocalDate.now(ZoneId.of("Asia/Kolkata")).plusYears(1), "PUNE", true);
+        driverAssignmentService.assignDriver(fixture.operationsUserId(), fixture.bookingId(), driver.profileId());
+
+        Instant scheduleNow = Instant.now().truncatedTo(ChronoUnit.MICROS);
+        jdbcTemplate.update("""
+                UPDATE booking_driver_assignments
+                SET reserved_from_at = ?, reserved_until_at = ?
+                WHERE booking_id = ?
+                """, Timestamp.from(scheduleNow.minusSeconds(60)),
+                Timestamp.from(scheduleNow.plusSeconds(3_600)), fixture.bookingId());
+
+        jdbcTemplate.execute("""
+                CREATE OR REPLACE FUNCTION it_fail_driver_trip_start_audit()
+                RETURNS trigger
+                LANGUAGE plpgsql
+                AS $body$
+                BEGIN
+                    IF NEW.action = 'BOOKING_TRIP_STARTED' THEN
+                        RAISE EXCEPTION 'forced Phase 3.8 trip-start audit failure';
+                    END IF;
+                    RETURN NEW;
+                END;
+                $body$
+                """);
+        jdbcTemplate.execute("""
+                CREATE TRIGGER it_fail_driver_trip_start_audit_trigger
+                BEFORE INSERT ON audit_logs
+                FOR EACH ROW
+                EXECUTE FUNCTION it_fail_driver_trip_start_audit()
+                """);
+
+        try {
+            assertThatThrownBy(() -> driverAssignmentService.startTrip(driver.userId(), fixture.bookingId()))
+                    .isInstanceOf(DataAccessException.class);
+        } finally {
+            jdbcTemplate.execute("DROP TRIGGER IF EXISTS it_fail_driver_trip_start_audit_trigger ON audit_logs");
+            jdbcTemplate.execute("DROP FUNCTION IF EXISTS it_fail_driver_trip_start_audit()");
+        }
+
+        assertThat(readBookingStatus(fixture.bookingId())).isEqualTo("ASSIGNED");
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT availability_status FROM driver_profiles WHERE id = ?",
+                String.class, driver.profileId())).isEqualTo("AVAILABLE");
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT trip_started_at IS NULL FROM booking_driver_assignments WHERE booking_id = ?",
+                Boolean.class, fixture.bookingId())).isTrue();
+        assertThat(count("SELECT count(*) FROM booking_events "
+                + "WHERE booking_id = ? AND event_type = 'BOOKING_TRIP_STARTED'",
+                fixture.bookingId())).isZero();
+        assertThat(count("SELECT count(*) FROM outbox_events "
+                + "WHERE aggregate_id = ? AND event_type = 'BOOKING_TRIP_STARTED'",
+                fixture.bookingId().toString())).isZero();
+    }
+
+
+    private Fixture createConfirmedFixture() throws Exception {
+        Fixture fixture = createFixture();
+        Instant reservedUntil = fixture.departureAt().plusSeconds(7_200);
+        bookingDecisionService.confirm(
+                fixture.operationsUserId(), fixture.bookingId(), fixture.vehicleId(),
+                OffsetDateTime.ofInstant(reservedUntil, ZoneOffset.UTC));
+        return fixture;
+    }
+
+    private DriverFixture createDriver(String verificationStatus, String availabilityStatus,
+                                       LocalDate licenseExpiry, String operatingCity,
+                                       boolean assignDriverRole) {
+        UUID userId = UUID.randomUUID();
+        UUID profileId = UUID.randomUUID();
+        String driverCode = "DRV" + UUID.randomUUID().toString().replace("-", "").substring(0, 10);
+        String licenseNumber = "LIC" + UUID.randomUUID().toString().replace("-", "");
+        insertUser(userId, "driver");
+        if (assignDriverRole) {
+            jdbcTemplate.update("INSERT INTO user_roles (user_id, role_id) VALUES (?, ?)",
+                    userId, DRIVER_ROLE_ID);
+        }
+        jdbcTemplate.update("""
+                INSERT INTO driver_profiles
+                (id, user_id, driver_code, license_number, license_expiry,
+                 verification_status, availability_status, operating_city)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                profileId, userId, driverCode, licenseNumber, licenseExpiry,
+                verificationStatus, availabilityStatus, operatingCity);
+        return new DriverFixture(profileId, userId, driverCode, "Phase 3.6 driver");
+    }
+
     private Fixture createFixture() throws Exception {
         UUID customerId = UUID.randomUUID();
         UUID operationsUserId = UUID.randomUUID();
@@ -544,6 +862,9 @@ class BookingDecisionServicePostgresIntegrationTest {
         assertThat(count("SELECT count(*) FROM outbox_events "
                 + "WHERE aggregate_type = 'BOOKING' AND aggregate_id = ? AND event_type = 'BOOKING_CONFIRMED'",
                 bookingId.toString())).isEqualTo(expectedCount);
+    }
+
+    private record DriverFixture(UUID profileId, UUID userId, String driverCode, String fullName) {
     }
 
     private record Fixture(
