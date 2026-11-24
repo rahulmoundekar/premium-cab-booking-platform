@@ -180,9 +180,6 @@ public class DriverAssignmentService {
         if (!driver.hasDriverRole() || !"ACTIVE".equals(driver.accountStatus())) {
             throw new ResourceNotFoundException("Driver profile was not found.");
         }
-        if (!"VERIFIED".equals(driver.verificationStatus())) {
-            throw conflict("The driver profile is not verified.");
-        }
         return driver;
     }
 
