@@ -437,6 +437,8 @@ class BookingDecisionServicePostgresIntegrationTest {
         Fixture fixture = createConfirmedFixture();
         DriverFixture driver = createDriver("VERIFIED", "AVAILABLE",
                 LocalDate.now(ZoneId.of("Asia/Kolkata")).plusYears(1), "PUNE", true);
+        DriverFixture replacement = createDriver("VERIFIED", "AVAILABLE",
+                LocalDate.now(ZoneId.of("Asia/Kolkata")).plusYears(1), "PUNE", true);
 
         var firstResult = driverAssignmentService.assignDriver(
                 fixture.operationsUserId(), fixture.bookingId(), driver.profileId());
@@ -451,6 +453,10 @@ class BookingDecisionServicePostgresIntegrationTest {
         var operationsRead = driverAssignmentService.findBookingAssignment(fixture.bookingId());
         assertThat(operationsRead.driverProfileId()).isEqualTo(driver.profileId());
         assertThat(operationsRead.vehicleId()).isEqualTo(fixture.vehicleId());
+        assertThatThrownBy(() -> driverAssignmentService.assignDriver(
+                fixture.operationsUserId(), fixture.bookingId(), replacement.profileId()))
+                .isInstanceOfSatisfying(ResponseStatusException.class, exception ->
+                        assertThat(exception.getStatusCode()).isEqualTo(HttpStatus.CONFLICT));
         assertThat(readBookingStatus(fixture.bookingId())).isEqualTo("ASSIGNED");
         assertThat(readBookingSnapshotStatus(fixture.bookingId())).isEqualTo("ASSIGNED");
         assertThat(count("SELECT count(*) FROM booking_driver_assignments WHERE booking_id = ?",
