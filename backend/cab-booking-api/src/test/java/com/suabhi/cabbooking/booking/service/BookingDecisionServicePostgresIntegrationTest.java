@@ -501,14 +501,19 @@ class BookingDecisionServicePostgresIntegrationTest {
                 createDriver("VERIFIED", "AVAILABLE", validExpiry, "MUMBAI", true),
                 createDriver("VERIFIED", "AVAILABLE", validExpiry, "PUNE", false));
 
-        for (DriverFixture driver : invalidDrivers) {
+        for (DriverFixture driver : invalidDrivers.subList(0, 4)) {
             assertThatThrownBy(() -> driverAssignmentService.assignDriver(
                     fixture.operationsUserId(), fixture.bookingId(), driver.profileId()))
-                    .isInstanceOf(RuntimeException.class);
+                    .isInstanceOfSatisfying(ResponseStatusException.class, exception ->
+                            assertThat(exception.getStatusCode()).isEqualTo(HttpStatus.CONFLICT));
             assertThat(readBookingStatus(fixture.bookingId())).isEqualTo("CONFIRMED");
             assertThat(count("SELECT count(*) FROM booking_driver_assignments WHERE booking_id = ?",
                     fixture.bookingId())).isZero();
         }
+        assertThatThrownBy(() -> driverAssignmentService.assignDriver(
+                fixture.operationsUserId(), fixture.bookingId(), invalidDrivers.get(4).profileId()))
+                .isInstanceOf(ResourceNotFoundException.class);
+        assertThat(readBookingStatus(fixture.bookingId())).isEqualTo("CONFIRMED");
     }
 
     @Test
