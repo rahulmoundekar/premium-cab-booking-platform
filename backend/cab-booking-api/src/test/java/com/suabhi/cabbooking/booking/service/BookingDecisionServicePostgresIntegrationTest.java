@@ -45,7 +45,7 @@ import tools.jackson.databind.ObjectMapper;
  * PostgreSQL-backed integration tests for booking decisions, customer lifecycle and driver trips.
  *
  * <p>The container runs the same PostGIS major/image family as local development.
- * Flyway applies the production V1-V5 migrations to this disposable database.
+ * Flyway applies the production V1-V6 migrations to this disposable database.
  * No application Compose datasource or persistent volume is used by this suite.</p>
  */
 @SpringBootTest(properties = "app.maps.google.enabled=false")
