@@ -42,7 +42,7 @@ import org.testcontainers.utility.DockerImageName;
 import tools.jackson.databind.ObjectMapper;
 
 /**
- * PostgreSQL-backed integration tests for booking decisions and customer lifecycle persistence.
+ * PostgreSQL-backed integration tests for booking decisions, customer lifecycle and driver trips.
  *
  * <p>The container runs the same PostGIS major/image family as local development.
  * Flyway applies the production V1-V5 migrations to this disposable database.
