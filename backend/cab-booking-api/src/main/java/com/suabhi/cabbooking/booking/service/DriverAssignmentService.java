@@ -96,6 +96,15 @@ public class DriverAssignmentService {
     }
 
     @Transactional(readOnly = true)
+    public DriverTripResponse findBookingAssignment(UUID bookingId) {
+        bookingRepository.findForManagement(bookingId)
+                .orElseThrow(() -> new ResourceNotFoundException("Booking was not found."));
+        return driverRepository.findTripForBooking(bookingId)
+                .map(this::toResponse)
+                .orElseThrow(() -> new ResourceNotFoundException("Driver assignment was not found."));
+    }
+
+    @Transactional(readOnly = true)
     public List<DriverTripResponse> findTrips(UUID driverUserId) {
         DriverAssignmentRepository.DriverProfileRow driver = requireDriverUser(driverUserId);
         return driverRepository.findTripsForDriver(driver.userId()).stream()
