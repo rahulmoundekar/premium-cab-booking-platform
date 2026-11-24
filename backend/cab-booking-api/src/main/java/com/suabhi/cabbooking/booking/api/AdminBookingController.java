@@ -53,6 +53,11 @@ public class AdminBookingController {
         return driverAssignmentService.findAvailableDrivers(bookingId);
     }
 
+    @GetMapping("/{bookingId}/driver-assignment")
+    public DriverTripResponse driverAssignment(@PathVariable UUID bookingId) {
+        return driverAssignmentService.findBookingAssignment(bookingId);
+    }
+
     @PostMapping("/{bookingId}/assign-driver")
     public DriverTripResponse assignDriver(
             @AuthenticationPrincipal AppUserPrincipal principal,
