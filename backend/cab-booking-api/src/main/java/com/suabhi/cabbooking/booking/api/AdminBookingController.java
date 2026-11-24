@@ -2,6 +2,7 @@ package com.suabhi.cabbooking.booking.api;
 
 import com.suabhi.cabbooking.booking.domain.BookingStatus;
 import com.suabhi.cabbooking.booking.service.BookingDecisionService;
+import com.suabhi.cabbooking.booking.service.DriverAssignmentService;
 import com.suabhi.cabbooking.identity.domain.AppUserPrincipal;
 import jakarta.validation.Valid;
 import java.time.OffsetDateTime;
@@ -21,9 +22,12 @@ import org.springframework.web.bind.annotation.RestController;
 @RequestMapping("/api/v1/admin/bookings")
 public class AdminBookingController {
     private final BookingDecisionService bookingDecisionService;
+    private final DriverAssignmentService driverAssignmentService;
 
-    public AdminBookingController(BookingDecisionService bookingDecisionService) {
+    public AdminBookingController(BookingDecisionService bookingDecisionService,
+                                  DriverAssignmentService driverAssignmentService) {
         this.bookingDecisionService = bookingDecisionService;
+        this.driverAssignmentService = driverAssignmentService;
     }
 
     @GetMapping
@@ -42,6 +46,20 @@ public class AdminBookingController {
             @RequestParam
             @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) OffsetDateTime reservedUntilAt) {
         return bookingDecisionService.findAvailableVehicles(bookingId, reservedUntilAt);
+    }
+
+    @GetMapping("/{bookingId}/available-drivers")
+    public List<DriverOptionResponse> availableDrivers(@PathVariable UUID bookingId) {
+        return driverAssignmentService.findAvailableDrivers(bookingId);
+    }
+
+    @PostMapping("/{bookingId}/assign-driver")
+    public DriverTripResponse assignDriver(
+            @AuthenticationPrincipal AppUserPrincipal principal,
+            @PathVariable UUID bookingId,
+            @Valid @RequestBody AssignDriverRequest request) {
+        return driverAssignmentService.assignDriver(
+                principal.getId(), bookingId, request.driverProfileId());
     }
 
     @PostMapping("/{bookingId}/confirm")
