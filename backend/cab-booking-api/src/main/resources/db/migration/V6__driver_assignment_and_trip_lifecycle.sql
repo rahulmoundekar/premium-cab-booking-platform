@@ -1,3 +1,6 @@
+ALTER TABLE driver_profiles
+  ADD COLUMN operating_city VARCHAR(100);
+
 CREATE TABLE booking_driver_assignments (
   id UUID PRIMARY KEY,
   booking_id UUID NOT NULL UNIQUE REFERENCES bookings(id) ON DELETE RESTRICT,
@@ -32,7 +35,7 @@ ALTER TABLE booking_driver_assignments
   );
 
 CREATE INDEX ix_driver_profiles_dispatch_eligibility
-  ON driver_profiles(verification_status, availability_status, license_expiry);
+  ON driver_profiles(operating_city, verification_status, availability_status, license_expiry);
 
 COMMENT ON TABLE booking_driver_assignments IS
   'Driver assignment and trip timestamps. The scheduled interval remains reserved after completion to prevent premature overlapping dispatch.';
