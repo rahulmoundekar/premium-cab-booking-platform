@@ -47,9 +47,9 @@ public class DriverAssignmentService {
                 .orElseThrow(() -> new ResourceNotFoundException("Booking was not found."));
         requireStatus(booking, BookingStatus.CONFIRMED,
                 "Drivers can only be shortlisted for a confirmed booking.");
-        if (bookingRepository.findActiveAllocation(bookingId).isEmpty()) {
-            throw conflict("The confirmed booking has no active vehicle reservation.");
-        }
+        BookingRepository.AllocationRow allocation = bookingRepository.findActiveAllocation(bookingId)
+                .orElseThrow(() -> conflict("The confirmed booking has no active vehicle reservation."));
+        requireReservationWindowOpen(allocation);
         return driverRepository.findAvailableDrivers(bookingId).stream()
                 .map(driver -> new DriverOptionResponse(
                         driver.id(), driver.driverCode(), driver.fullName(), driver.licenseExpiry()))
@@ -74,6 +74,7 @@ public class DriverAssignmentService {
 
         BookingRepository.AllocationRow allocation = bookingRepository.findActiveAllocation(bookingId)
                 .orElseThrow(() -> conflict("The confirmed booking has no active vehicle reservation."));
+        requireReservationWindowOpen(allocation);
         DriverAssignmentRepository.DriverProfileRow driver = driverRepository.findDriverProfile(driverProfileId)
                 .orElseThrow(() -> new ResourceNotFoundException("Driver profile was not found."));
         validateDriver(driver, allocation.reservedUntilAt(), current.quote().journey().originCity());
@@ -180,6 +181,12 @@ public class DriverAssignmentService {
                 driver.userId(), completed, driver.id(), driver.driverCode(), completedAt);
         return toResponse(driverRepository.findTripForDriver(bookingId, driver.userId())
                 .orElseThrow(() -> new IllegalStateException("Completed trip could not be reloaded.")));
+    }
+
+    private void requireReservationWindowOpen(BookingRepository.AllocationRow allocation) {
+        if (!allocation.reservedUntilAt().isAfter(clock.instant())) {
+            throw conflict("The vehicle reservation window has expired; refresh the booking schedule before assigning a driver.");
+        }
     }
 
     private DriverAssignmentRepository.DriverProfileRow requireDriverUser(UUID driverUserId) {
