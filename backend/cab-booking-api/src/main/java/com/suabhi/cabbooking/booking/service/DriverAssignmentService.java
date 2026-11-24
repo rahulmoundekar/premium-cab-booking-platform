@@ -76,7 +76,7 @@ public class DriverAssignmentService {
                 .orElseThrow(() -> conflict("The confirmed booking has no active vehicle reservation."));
         DriverAssignmentRepository.DriverProfileRow driver = driverRepository.findDriverProfile(driverProfileId)
                 .orElseThrow(() -> new ResourceNotFoundException("Driver profile was not found."));
-        validateDriver(driver, allocation.reservedUntilAt());
+        validateDriver(driver, allocation.reservedUntilAt(), current.quote().journey().originCity());
 
         Instant assignedAt = clock.instant();
         try {
@@ -186,7 +186,7 @@ public class DriverAssignmentService {
         return driver;
     }
 
-    private void validateDriver(DriverAssignmentRepository.DriverProfileRow driver, Instant reservedUntilAt) {
+    private void validateDriver(DriverAssignmentRepository.DriverProfileRow driver, Instant reservedUntilAt, String operatingCity) {
         if (!driver.hasDriverRole() || !"ACTIVE".equals(driver.accountStatus())) {
             throw new ResourceNotFoundException("An active driver account with the DRIVER role is required.");
         }
@@ -195,6 +195,10 @@ public class DriverAssignmentService {
         }
         if (!"AVAILABLE".equals(driver.availabilityStatus())) {
             throw conflict("The driver is not currently available.");
+        }
+        if (driver.operatingCity() == null
+                || !driver.operatingCity().strip().equalsIgnoreCase(operatingCity.strip())) {
+            throw conflict("The driver is not registered for the booking's operating city.");
         }
         LocalDate requiredLicenseDate = reservedUntilAt.atZone(OPERATING_ZONE).toLocalDate();
         if (driver.licenseExpiry().isBefore(requiredLicenseDate)) {
