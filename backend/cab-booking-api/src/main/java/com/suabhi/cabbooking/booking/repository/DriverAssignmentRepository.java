@@ -16,7 +16,7 @@ import tools.jackson.databind.ObjectMapper;
 @Repository
 public class DriverAssignmentRepository {
     private static final String DRIVER_PROFILE_SELECT = """
-            SELECT dp.id, dp.user_id, dp.driver_code, u.full_name, dp.license_expiry,
+            SELECT dp.id, dp.user_id, dp.driver_code, u.full_name, dp.operating_city, dp.license_expiry,
                    dp.verification_status, dp.availability_status, u.account_status,
                    EXISTS (
                      SELECT 1
@@ -56,7 +56,9 @@ public class DriverAssignmentRepository {
                 JOIN roles r ON r.id = ur.role_id AND r.code = 'DRIVER'
                 JOIN booking_vehicle_allocations va
                   ON va.booking_id = ? AND va.allocation_status = 'ACTIVE'
-                WHERE dp.verification_status = 'VERIFIED'
+                JOIN bookings b ON b.id = va.booking_id
+                WHERE upper(dp.operating_city) = upper(b.operating_city)
+                  AND dp.verification_status = 'VERIFIED'
                   AND dp.availability_status = 'AVAILABLE'
                   AND u.account_status = 'ACTIVE'
                   AND dp.license_expiry >=
@@ -163,6 +165,7 @@ public class DriverAssignmentRepository {
                 rs.getObject("user_id", UUID.class),
                 rs.getString("driver_code"),
                 rs.getString("full_name"),
+                rs.getString("operating_city"),
                 rs.getDate("license_expiry").toLocalDate(),
                 rs.getString("verification_status"),
                 rs.getString("availability_status"),
@@ -199,6 +202,7 @@ public class DriverAssignmentRepository {
             UUID userId,
             String driverCode,
             String fullName,
+            String operatingCity,
             LocalDate licenseExpiry,
             String verificationStatus,
             String availabilityStatus,
