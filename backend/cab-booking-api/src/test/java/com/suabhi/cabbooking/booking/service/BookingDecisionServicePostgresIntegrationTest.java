@@ -448,6 +448,9 @@ class BookingDecisionServicePostgresIntegrationTest {
         assertThat(firstResult.vehicleId()).isEqualTo(fixture.vehicleId());
         assertThat(replayResult.booking().status()).isEqualTo(BookingStatus.ASSIGNED);
         assertThat(replayResult.driverProfileId()).isEqualTo(driver.profileId());
+        var operationsRead = driverAssignmentService.findBookingAssignment(fixture.bookingId());
+        assertThat(operationsRead.driverProfileId()).isEqualTo(driver.profileId());
+        assertThat(operationsRead.vehicleId()).isEqualTo(fixture.vehicleId());
         assertThat(readBookingStatus(fixture.bookingId())).isEqualTo("ASSIGNED");
         assertThat(readBookingSnapshotStatus(fixture.bookingId())).isEqualTo("ASSIGNED");
         assertThat(count("SELECT count(*) FROM booking_driver_assignments WHERE booking_id = ?",
