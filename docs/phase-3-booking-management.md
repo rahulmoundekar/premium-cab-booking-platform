@@ -578,7 +578,7 @@ Phase 3.8 adds operations-controlled driver assignment and an authenticated driv
 
 The supported booking progression is:
 
-\`PENDING_CONFIRMATION -> CONFIRMED -> ASSIGNED -> IN_PROGRESS -> COMPLETED\`
+`PENDING_CONFIRMATION -> CONFIRMED -> ASSIGNED -> IN_PROGRESS -> COMPLETED`
 
 Rejected and cancelled bookings remain terminal for this workflow. Driver reassignment and cancellation after confirmation are not introduced.
 
@@ -586,54 +586,55 @@ Rejected and cancelled bookings remain terminal for this workflow. Driver reassi
 
 A driver can be assigned only when all of the following are true:
 
-- The booking is \`CONFIRMED\` and has an active vehicle reservation.
-- The driver account is active, has the \`DRIVER\` role and has a \`driver_profiles\` row.
-- The driver profile is \`VERIFIED\` and currently \`AVAILABLE\`.
+- The booking is `CONFIRMED` and has an active vehicle reservation.
+- The driver account is active, has the `DRIVER` role and has a `driver_profiles` row.
+- The driver profile is `VERIFIED` and currently `AVAILABLE`.
 - The driver's operating city matches the booking's operating city.
 - The driver's licence remains valid through the end date of the reserved interval.
 - The driver has no overlapping assignment in the reserved interval.
 
-Migration \`V6__driver_assignment_and_trip_lifecycle.sql\` adds nullable \`driver_profiles.operating_city\` and the \`booking_driver_assignments\` ledger. Existing driver profiles are not assigned a fabricated city; set their actual operating city before dispatch eligibility is granted.
+Migration `V6__driver_assignment_and_trip_lifecycle.sql` adds nullable `driver_profiles.operating_city` and the `booking_driver_assignments` ledger. Existing driver profiles are not assigned a fabricated city; set their actual operating city before dispatch eligibility is granted.
 
 The assignment ledger copies the active vehicle reservation's half-open interval. A PostgreSQL GiST exclusion constraint prevents two bookings from reserving the same driver over overlapping intervals, including concurrent dispatch attempts. The booking ID is unique in the ledger: reassigning an already assigned booking is deliberately not supported.
 
-A future reservation does not immediately change the driver's presence to \`ON_TRIP\`. Starting the trip changes availability to \`ON_TRIP\`; completing it returns the driver to \`AVAILABLE\`. The assignment's reserved interval remains in the ledger after completion, so an early completion does not permit another overlapping dispatch before the reserved end time.
+A future reservation does not immediately change the driver's presence to `ON_TRIP`. Starting the trip changes availability to `ON_TRIP`; completing it returns the driver to `AVAILABLE`. The assignment's reserved interval remains in the ledger after completion, so an early completion does not permit another overlapping dispatch before the reserved end time.
 
 ### Operations API
 
-The existing operations role policy applies (\`ADMIN\`, \`SUPER_ADMIN\`, \`FLEET_MANAGER\`, \`DISPATCHER\`). POST requests continue to require CSRF validation.
+The existing operations role policy applies (`ADMIN`, `SUPER_ADMIN`, `FLEET_MANAGER`, `DISPATCHER`). POST requests continue to require CSRF validation.
 
 | Method | Endpoint | Purpose |
 |---|---|---|
-| GET | \`/api/v1/admin/bookings/{bookingId}/available-drivers\` | List verified, available drivers matching city, licence and schedule |
-| POST | \`/api/v1/admin/bookings/{bookingId}/assign-driver\` | Assign a driver profile to a confirmed booking |
+| GET | `/api/v1/admin/bookings/{bookingId}/available-drivers` | List verified, available drivers matching city, licence and schedule |
+| GET | `/api/v1/admin/bookings/{bookingId}/driver-assignment` | Read the persisted driver and trip assignment |
+| POST | `/api/v1/admin/bookings/{bookingId}/assign-driver` | Assign a driver profile to a confirmed booking |
 
 Assignment request:
 
-\`\`\`json
+```json
 {
   "driverProfileId": "UUID-from-an-eligible-driver-profile"
 }
-\`\`\`
+```
 
 Repeating the same assignment for the same booking and driver returns the existing assignment without duplicate event, audit or outbox records. A different driver for an already assigned booking returns HTTP 409.
 
 ### Driver API
 
-All \`/api/v1/driver/**\` routes require the \`DRIVER\` role. The service also resolves the driver's profile from the authenticated user ID and filters every trip read by that profile, so a driver cannot read or mutate another driver's assignment.
+All `/api/v1/driver/**` routes require the `DRIVER` role. The service also resolves the driver's profile from the authenticated user ID and filters every trip read by that profile, so a driver cannot read or mutate another driver's assignment.
 
 | Method | Endpoint | Purpose |
 |---|---|---|
-| GET | \`/api/v1/driver/trips\` | List the authenticated driver's assigned, in-progress and completed trips |
-| GET | \`/api/v1/driver/trips/{bookingId}\` | Read one trip belonging to the authenticated driver |
-| POST | \`/api/v1/driver/trips/{bookingId}/start\` | Start an assigned trip within its reserved interval |
-| POST | \`/api/v1/driver/trips/{bookingId}/complete\` | Complete an in-progress trip |
+| GET | `/api/v1/driver/trips` | List the authenticated driver's assigned, in-progress and completed trips |
+| GET | `/api/v1/driver/trips/{bookingId}` | Read one trip belonging to the authenticated driver |
+| POST | `/api/v1/driver/trips/{bookingId}/start` | Start an assigned trip within its reserved interval |
+| POST | `/api/v1/driver/trips/{bookingId}/complete` | Complete an in-progress trip |
 
-Start is idempotent after the booking reaches \`IN_PROGRESS\`; completion is idempotent after \`COMPLETED\`. Completion is not permitted before trip start. Both transitions update booking status/snapshot, assignment timestamps and driver availability in the same transaction as the booking event, audit log and outbox event.
+Start is idempotent after the booking reaches `IN_PROGRESS`; completion is idempotent after `COMPLETED`. Completion is not permitted before trip start. Both transitions update booking status/snapshot, assignment timestamps and driver availability in the same transaction as the booking event, audit log and outbox event.
 
 ### Deliberate boundaries
 
-- This increment uses existing \`driver_profiles\` records; a driver onboarding/profile administration UI is not included. A profile must already be provisioned, have the \`DRIVER\` role, be verified, have a current licence and have its real \`operating_city\` populated.
+- This increment uses existing `driver_profiles` records; a driver onboarding/profile administration UI is not included. A profile must already be provisioned, have the `DRIVER` role, be verified, have a current licence and have its real `operating_city` populated.
 - No driver reassignment, cancellation after confirmation, cancellation fees, refunds, payment settlement or driver payout rules are added.
 - No GPS tracking, geofencing, trip route mutation, vehicle status mutation or automatic trip completion is included.
 - The active vehicle reservation remains authoritative for the vehicle's scheduled window. Driver trip completion does not release that reservation early.
@@ -645,16 +646,16 @@ The Testcontainers suite now contains 16 integration tests (the previous nine pl
 
 Run the targeted suite from the repository root in PowerShell:
 
-\`\`\`powershell
-docker run --rm \`
-  -v "$($PWD.Path):/workspace" \`
-  -v /var/run/docker.sock:/var/run/docker.sock \`
-  -w /workspace/backend/cab-booking-api \`
-  -e TESTCONTAINERS_HOST_OVERRIDE=host.docker.internal \`
-  maven:3.9.9-eclipse-temurin-21 \`
+```powershell
+docker run --rm `
+  -v "$($PWD.Path):/workspace" `
+  -v /var/run/docker.sock:/var/run/docker.sock `
+  -w /workspace/backend/cab-booking-api `
+  -e TESTCONTAINERS_HOST_OVERRIDE=host.docker.internal `
+  maven:3.9.9-eclipse-temurin-21 `
   mvn -B -ntp -Dtest=BookingDecisionServicePostgresIntegrationTest test
-\`\`\`
+```
 
-After the targeted suite passes, run the full backend verification with the same Docker socket and host override, replacing the final Maven arguments with \`mvn -B -ntp clean verify\`. Confirm that the Testcontainers integration class ran and was not skipped.
+After the targeted suite passes, run the full backend verification with the same Docker socket and host override, replacing the final Maven arguments with `mvn -B -ntp clean verify`. Confirm that the Testcontainers integration class ran and was not skipped.
 
 All driver and trip fixtures in the suite are generated in the disposable PostGIS container. The migration applies through Flyway to a fresh Testcontainers database; this documentation does not claim that the user's local Compose database has been migrated or that real driver profiles exist.
