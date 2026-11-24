@@ -69,6 +69,7 @@ public class SecurityConfig {
                     .requestMatchers("/api/v1/admin/pricing/**").hasAnyRole("ADMIN", "SUPER_ADMIN")
                     .requestMatchers("/api/v1/admin/bookings/**")
                         .hasAnyRole("ADMIN", "SUPER_ADMIN", "FLEET_MANAGER", "DISPATCHER")
+                    .requestMatchers("/api/v1/driver/**").hasRole("DRIVER")
                     .requestMatchers("/api/v1/customer/**").hasRole("CUSTOMER")
                     .anyRequest().authenticated())
             .exceptionHandling(exceptions -> exceptions
