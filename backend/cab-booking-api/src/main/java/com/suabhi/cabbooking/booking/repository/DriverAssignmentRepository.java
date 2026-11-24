@@ -16,7 +16,7 @@ import tools.jackson.databind.ObjectMapper;
 @Repository
 public class DriverAssignmentRepository {
     private static final String DRIVER_PROFILE_SELECT = """
-            SELECT dp.id, dp.user_id, dp.driver_code, dp.license_expiry,
+            SELECT dp.id, dp.user_id, dp.driver_code, u.full_name, dp.license_expiry,
                    dp.verification_status, dp.availability_status, u.account_status,
                    EXISTS (
                      SELECT 1
@@ -162,6 +162,7 @@ public class DriverAssignmentRepository {
                 rs.getObject("id", UUID.class),
                 rs.getObject("user_id", UUID.class),
                 rs.getString("driver_code"),
+                rs.getString("full_name"),
                 rs.getDate("license_expiry").toLocalDate(),
                 rs.getString("verification_status"),
                 rs.getString("availability_status"),
@@ -197,6 +198,7 @@ public class DriverAssignmentRepository {
             UUID id,
             UUID userId,
             String driverCode,
+            String fullName,
             LocalDate licenseExpiry,
             String verificationStatus,
             String availabilityStatus,
