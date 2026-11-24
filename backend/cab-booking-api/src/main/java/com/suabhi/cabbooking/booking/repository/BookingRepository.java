@@ -240,6 +240,31 @@ public class BookingRepository {
                 Map.of("decisionReason", reason));
     }
 
+    public void recordDriverAssigned(UUID actorId, BookingResponse booking,
+                                     UUID driverProfileId, String driverCode,
+                                     Instant reservedFromAt, Instant reservedUntilAt) {
+        Map<String, Object> metadata = new LinkedHashMap<>();
+        metadata.put("driverProfileId", driverProfileId.toString());
+        metadata.put("driverCode", driverCode);
+        metadata.put("reservedFromAt", reservedFromAt.toString());
+        metadata.put("reservedUntilAt", reservedUntilAt.toString());
+        recordEvent(actorId, booking, "BOOKING_DRIVER_ASSIGNED", BookingStatus.CONFIRMED, metadata);
+    }
+
+    public void recordTripStarted(UUID actorId, BookingResponse booking,
+                                  UUID driverProfileId, String driverCode, Instant startedAt) {
+        recordEvent(actorId, booking, "BOOKING_TRIP_STARTED", BookingStatus.ASSIGNED,
+                Map.of("driverProfileId", driverProfileId.toString(),
+                        "driverCode", driverCode, "startedAt", startedAt.toString()));
+    }
+
+    public void recordTripCompleted(UUID actorId, BookingResponse booking,
+                                    UUID driverProfileId, String driverCode, Instant completedAt) {
+        recordEvent(actorId, booking, "BOOKING_TRIP_COMPLETED", BookingStatus.IN_PROGRESS,
+                Map.of("driverProfileId", driverProfileId.toString(),
+                        "driverCode", driverCode, "completedAt", completedAt.toString()));
+    }
+
     private void recordEvent(UUID actorId, BookingResponse booking, String eventType,
                              BookingStatus previousStatus, Map<String, Object> additionalMetadata) {
         Map<String, Object> eventData = new LinkedHashMap<>();
