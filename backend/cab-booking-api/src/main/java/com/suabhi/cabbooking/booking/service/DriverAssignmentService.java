@@ -192,7 +192,8 @@ public class DriverAssignmentService {
         return driver;
     }
 
-    private void validateDriver(DriverAssignmentRepository.DriverProfileRow driver, Instant reservedUntilAt, String operatingCity) {
+    private void validateDriver(DriverAssignmentRepository.DriverProfileRow driver,
+                                Instant reservedUntilAt, String operatingCity) {
         if (!driver.hasDriverRole() || !"ACTIVE".equals(driver.accountStatus())) {
             throw new ResourceNotFoundException("An active driver account with the DRIVER role is required.");
         }
